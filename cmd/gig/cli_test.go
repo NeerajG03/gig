@@ -325,3 +325,121 @@ func TestCLI_Children(t *testing.T) {
 	assertContains(t, out, "Child 1")
 	assertContains(t, out, "Child 2")
 }
+
+func TestCLI_Doctor(t *testing.T) {
+	bin, home := setupGig(t)
+
+	run(t, bin, home, "create", "Task 1")
+	run(t, bin, home, "create", "Task 2")
+
+	out := run(t, bin, home, "doctor")
+	assertContains(t, out, "Checking gig health")
+	assertContains(t, out, "[ok]")
+	assertContains(t, out, "database integrity OK")
+	assertContains(t, out, "no dependency cycles")
+	assertContains(t, out, "2 task(s) in database")
+	assertContains(t, out, "All checks passed")
+}
+
+func TestCLI_DoctorJSON(t *testing.T) {
+	bin, home := setupGig(t)
+
+	out := run(t, bin, home, "doctor", "--json")
+	var report map[string]any
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	diags, ok := report["diagnostics"].([]any)
+	if !ok || len(diags) == 0 {
+		t.Error("expected diagnostics array in JSON output")
+	}
+}
+
+func TestCLI_DoctorEmptyDB(t *testing.T) {
+	bin, home := setupGig(t)
+
+	out := run(t, bin, home, "doctor")
+	assertContains(t, out, "0 task(s) in database")
+	assertContains(t, out, "All checks passed")
+}
+
+func TestCLI_Blocked(t *testing.T) {
+	bin, home := setupGig(t)
+
+	idBlocker := strings.TrimSpace(run(t, bin, home, "create", "Blocker", "--quiet"))
+	idBlocked := strings.TrimSpace(run(t, bin, home, "create", "Blocked one", "--quiet"))
+	run(t, bin, home, "dep", "add", idBlocked, idBlocker)
+
+	out := run(t, bin, home, "blocked")
+	assertContains(t, out, "Blocked one")
+	assertNotContains(t, out, "Blocker")
+}
+
+func TestCLI_ExportImport(t *testing.T) {
+	bin, home := setupGig(t)
+
+	run(t, bin, home, "create", "Export me", "--priority", "1")
+
+	exportPath := filepath.Join(home, "export.jsonl")
+	run(t, bin, home, "export", "--file", exportPath)
+
+	if _, err := os.Stat(exportPath); err != nil {
+		t.Fatalf("export file not created: %v", err)
+	}
+
+	// Create a fresh GIG_HOME and import.
+	home2 := t.TempDir()
+	run(t, bin, home2, "init", "--prefix", "test")
+	run(t, bin, home2, "import", "--file", exportPath)
+
+	out := run(t, bin, home2, "list")
+	assertContains(t, out, "Export me")
+}
+
+func TestCLI_InvalidCommand(t *testing.T) {
+	bin, home := setupGig(t)
+
+	out := runExpectFail(t, bin, home, "nonexistent")
+	assertContains(t, out, "unknown command")
+}
+
+func TestCLI_ConfigSetInvalidKey(t *testing.T) {
+	bin, home := setupGig(t)
+
+	out := runExpectFail(t, bin, home, "config", "set", "fake_key", "value")
+	assertContains(t, out, "unknown config key")
+}
+
+func TestCLI_ConfigSetInvalidValue(t *testing.T) {
+	bin, home := setupGig(t)
+
+	out := runExpectFail(t, bin, home, "config", "set", "default_view", "kanban")
+	assertContains(t, out, "list")
+	assertContains(t, out, "tree")
+
+	out = runExpectFail(t, bin, home, "config", "set", "hash_length", "99")
+	assertContains(t, out, "3")
+	assertContains(t, out, "8")
+}
+
+func TestCLI_DepCycle(t *testing.T) {
+	bin, home := setupGig(t)
+
+	idA := strings.TrimSpace(run(t, bin, home, "create", "A", "--quiet"))
+	idB := strings.TrimSpace(run(t, bin, home, "create", "B", "--quiet"))
+	run(t, bin, home, "dep", "add", idB, idA)
+
+	// Adding reverse dep should fail (cycle).
+	out := runExpectFail(t, bin, home, "dep", "add", idA, idB)
+	assertContains(t, out, "cycle")
+}
+
+func TestCLI_ClaimTask(t *testing.T) {
+	bin, home := setupGig(t)
+
+	id := strings.TrimSpace(run(t, bin, home, "create", "Claimable", "--quiet"))
+	run(t, bin, home, "update", id, "--claim")
+
+	show := run(t, bin, home, "show", id)
+	assertContains(t, show, "in_progress")
+}
