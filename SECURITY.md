@@ -11,7 +11,7 @@
 If you discover a security vulnerability in gig, please report it responsibly:
 
 1. **Do not** open a public GitHub issue for security vulnerabilities.
-2. Email **REDACTED** with:
+2. Open a [private security advisory](https://github.com/NeerajG03/gig/security/advisories/new) on GitHub with:
    - A description of the vulnerability
    - Steps to reproduce
    - Impact assessment
