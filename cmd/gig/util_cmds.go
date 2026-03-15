@@ -17,7 +17,6 @@ func initCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home := gig.DefaultGigHome()
 
-			// Check if already initialized.
 			configPath := gig.DefaultConfigPath()
 			if _, err := os.Stat(configPath); err == nil {
 				fmt.Printf("gig already initialized at %s\n", home)
@@ -33,7 +32,6 @@ func initCmd() *cobra.Command {
 				return fmt.Errorf("save config: %w", err)
 			}
 
-			// Open DB to run migrations.
 			s, err := gig.Open(cfg.DBPath, gig.WithPrefix(cfg.Prefix))
 			if err != nil {
 				return fmt.Errorf("init database: %w", err)
@@ -137,31 +135,6 @@ func statsCmd() *cobra.Command {
 	}
 }
 
-func configCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "config",
-		Short: "Show current configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := gig.LoadConfig("")
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return printJSON(cfg)
-			}
-			fmt.Printf("Home:     %s\n", gig.DefaultGigHome())
-			fmt.Printf("Config:   %s\n", gig.DefaultConfigPath())
-			fmt.Printf("Database: %s\n", cfg.DBPath)
-			fmt.Printf("Prefix:   %s\n", cfg.Prefix)
-			fmt.Printf("Hash Len: %d\n", cfg.HashLen)
-			if cfg.SyncRepo != "" {
-				fmt.Printf("Sync Repo: %s\n", cfg.SyncRepo)
-			}
-			return nil
-		},
-	}
-}
-
 func doctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
@@ -169,7 +142,6 @@ func doctorCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Println("Checking gig health...")
 
-			// Check config.
 			configPath := gig.DefaultConfigPath()
 			if _, err := os.Stat(configPath); err != nil {
 				fmt.Printf("  [!] Config not found: %s\n", configPath)
@@ -177,7 +149,6 @@ func doctorCmd() *cobra.Command {
 				fmt.Printf("  [ok] Config: %s\n", configPath)
 			}
 
-			// Check DB.
 			cfg, _ := gig.LoadConfig("")
 			if _, err := os.Stat(cfg.DBPath); err != nil {
 				fmt.Printf("  [!] Database not found: %s\n", cfg.DBPath)
@@ -185,7 +156,6 @@ func doctorCmd() *cobra.Command {
 				fmt.Printf("  [ok] Database: %s\n", cfg.DBPath)
 			}
 
-			// Check for cycles.
 			cycles, err := store.DetectCycles()
 			if err != nil {
 				fmt.Printf("  [!] Cycle detection failed: %v\n", err)
@@ -195,7 +165,6 @@ func doctorCmd() *cobra.Command {
 				fmt.Println("  [ok] No dependency cycles")
 			}
 
-			// Task stats.
 			all, _ := store.List(gig.ListParams{})
 			fmt.Printf("  [ok] %d tasks in database\n", len(all))
 

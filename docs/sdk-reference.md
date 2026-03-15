@@ -43,15 +43,16 @@ task, err := store.Create(gig.CreateParams{
 ```go
 task, err := store.Get("gig-a3f8")
 tasks, err := store.List(gig.ListParams{
-    Status:     &status,     // *gig.Status — nil means "any"
-    Assignee:   "neeraj",
-    Priority:   &priority,   // *gig.Priority
-    ParentID:   &parentID,   // *string — "" for root tasks, nil for any
-    Type:       &taskType,   // *gig.TaskType
-    Label:      "backend",   // substring match
-    AttrFilter: map[string]string{"phase": "research"}, // custom attribute filter
-    Limit:      20,
-    Offset:     0,
+    Status:          &status,     // *gig.Status — nil means "any"
+    Assignee:        "neeraj",
+    Priority:        &priority,   // *gig.Priority
+    ParentID:        &parentID,   // *string — "" for root tasks, nil for any
+    Type:            &taskType,   // *gig.TaskType
+    Label:           "backend",   // substring match
+    AttrFilter:      map[string]string{"phase": "research"}, // custom attribute filter
+    ExcludeStatuses: []gig.Status{gig.StatusClosed}, // exclude tasks with these statuses
+    Limit:           20,
+    Offset:          0,
 })
 results, err := store.Search("login bug")      // title + description LIKE search
 children, err := store.Children("gig-a3f8")     // direct children

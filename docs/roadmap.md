@@ -38,9 +38,12 @@
 - [x] **`--actor` flag**: global flag to set actor name for events (default: "cli")
 - [x] **Subtask tree in show**: `gig show` displays recursive ASCII tree of all descendants
 - [x] **Shell completions**: bash/zsh/fish with dynamic task ID, status, type, priority, and attr key completion
+- [x] **Tree view in list**: `gig list --tree` renders hierarchical ASCII tree, `--all` includes closed tasks
+- [x] **Config-driven defaults**: `default_view` (list/tree) and `show_all` in `gig.yaml`, CLI flags override
+- [x] **ExcludeStatuses filter**: SDK-level status exclusion in `ListParams`
 - [ ] **Homebrew tap**: `brew install neerajg/tap/gig`
 - [ ] **Config validation**: `gig doctor` warns on invalid config values
-- [ ] **More test coverage**: config, hooks, edge cases
+- [ ] **More test coverage**: hooks, edge cases
 
 ### v0.3.0 — Sync Repo Integration
 

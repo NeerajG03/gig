@@ -70,7 +70,7 @@ store.UpdateStatus(task.ID, gig.StatusInProgress, "agent-1")
 ```
 gig init [--prefix NAME]
 gig create <title> [--desc --type --priority --parent --assignee --labels]
-gig list [--status --assignee --priority --type --label --parent --attr key=val --limit --json --quiet]
+gig list [--status --assignee --priority --type --label --parent --attr key=val --limit --tree --list --all --json --quiet]
 gig show <id> [--json]
 gig update <id> [--title --desc --status --priority --assignee --notes --labels --claim]
 gig close <id> [id2...] [--reason]
@@ -98,9 +98,9 @@ gig import [--file]
 gig sync
 gig events <id>
 gig stats
-gig config
+gig config                                          # show current config
+gig config set <key> <value>                        # set a config value
 gig doctor
-gig search <query>
 gig ui [--port 9741]
 gig completion [bash|zsh|fish]
 ```
@@ -120,7 +120,7 @@ source <(gig completion zsh)
 gig completion fish | source
 ```
 
-## Storage
+## Configuration
 
 All data lives centrally in `~/.gig/` (override with `GIG_HOME` env var):
 
@@ -131,6 +131,28 @@ All data lives centrally in `~/.gig/` (override with `GIG_HOME` env var):
 ├── tasks.jsonl     # Exported tasks (for sync/backup)
 └── events.jsonl    # Exported event history
 ```
+
+Example `gig.yaml`:
+
+```yaml
+prefix: "myapp"         # ID prefix (default: "gig")
+hash_length: 4          # ID hash length, 3-8 (default: 4)
+default_view: tree      # "list" (default) or "tree" for gig list
+show_all: false         # true to include closed tasks by default
+hooks:
+  on_status_change: [...]
+```
+
+Set config from CLI:
+
+```bash
+gig config set default_view tree
+gig config set show_all true
+gig config set prefix myapp
+gig config set hash_length 6
+```
+
+CLI flags (`--tree`, `--list`, `--all`) override config values.
 
 ## Part of JumpStreet
 
