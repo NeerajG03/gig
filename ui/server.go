@@ -74,6 +74,12 @@ func (s *Server) Handler() http.Handler {
 	return s.mux
 }
 
+// CreateData is the template data for the create form.
+type CreateData struct {
+	AllTasks          []*gig.Task
+	PreselectedParent string
+}
+
 var funcMap = template.FuncMap{
 	"statusIcon": func(st gig.Status) string {
 		switch st {
@@ -138,6 +144,12 @@ var funcMap = template.FuncMap{
 		default:
 			return string(st)
 		}
+	},
+	"truncate": func(s string, n int) string {
+		if len(s) <= n {
+			return s
+		}
+		return s[:n] + "..."
 	},
 	"columnColor": func(st gig.Status) string {
 		switch st {
@@ -290,7 +302,10 @@ func (s *Server) handleDetail(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCreateForm(w http.ResponseWriter, r *http.Request) {
 	allTasks, _ := s.store.List(gig.ListParams{})
-	data := DetailData{AllTasks: allTasks}
+	data := CreateData{
+		AllTasks:          allTasks,
+		PreselectedParent: r.URL.Query().Get("parent"),
+	}
 	w.Header().Set("Content-Type", "text/html")
 	s.tmpl.ExecuteTemplate(w, "create.html", data)
 }
@@ -321,12 +336,13 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	parentID := r.FormValue("parent")
 	_, err := s.store.Create(gig.CreateParams{
 		Title:       r.FormValue("title"),
 		Description: r.FormValue("description"),
 		Type:        gig.TaskType(r.FormValue("type")),
 		Priority:    parsePriority(r.FormValue("priority")),
-		ParentID:    r.FormValue("parent"),
+		ParentID:    parentID,
 		Assignee:    r.FormValue("assignee"),
 		Labels:      labels,
 		Notes:       r.FormValue("notes"),
@@ -337,6 +353,10 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if parentID != "" {
+		http.Redirect(w, r, "/task/"+parentID, http.StatusSeeOther)
+		return
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

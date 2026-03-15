@@ -149,6 +149,8 @@
             <div class="sidebar-section">
                 <h4>Actions</h4>
 
+                <a href="/new?parent={{.Task.ID}}" class="btn btn-secondary btn-full" style="margin-bottom: 8px; text-align: center;">+ Add Subtask</a>
+
                 {{if ne .Task.Status "closed"}}
                 <form hx-post="/task/{{.Task.ID}}/status" hx-target="body" class="action-form">
                     <label>Change Status</label>
