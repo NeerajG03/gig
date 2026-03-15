@@ -4,6 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to re-release (e.g. v0.0.2)"
+        required: true
 
 permissions:
   contents: write
@@ -12,7 +17,18 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
 
       - uses: actions/setup-go@v6
         with:
@@ -23,11 +39,14 @@ jobs:
           go test ./... -count=1
           go test -tags=e2e -count=1 ./cmd/gig/
 
-      - name: Create GitHub Release
+      - name: Create or Update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          if gh release view "$TAG" &>/dev/null; then
+            gh release delete "$TAG" --yes
+          fi
           gh release create "$TAG" \
             --title "$TAG" \
             --generate-notes
@@ -36,7 +55,7 @@ jobs:
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
+          TAG="${{ steps.tag.outputs.tag }}"
           VERSION="${TAG#v}"
 
           # Get tarball SHA256
@@ -76,5 +95,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Formula/gig.rb
-          git commit -m "Update gig to ${VERSION}"
-          git push
+          git diff --cached --quiet && echo "No changes" || (git commit -m "Update gig to ${VERSION}" && git push)
