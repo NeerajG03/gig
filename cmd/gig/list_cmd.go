@@ -124,11 +124,13 @@ func listCmd() *cobra.Command {
 
 // listTree renders tasks as a hierarchical tree.
 func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error {
-	// For tree view, show only root tasks unless --parent was explicit.
+	// For tree view, fetch all root tasks (including closed) so we can keep
+	// closed parents that have open children. Filtering happens in filterTree.
 	if !cmd.Flags().Changed("parent") {
 		rootID := ""
 		params.ParentID = &rootID
 	}
+	params.ExcludeStatuses = nil
 
 	tasks, err := store.List(params)
 	if err != nil {
@@ -142,10 +144,10 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 			if err != nil {
 				return err
 			}
-			if !includeAll {
-				tree.Children = filterTree(tree.Children, []gig.Status{gig.StatusClosed})
-			}
 			trees = append(trees, tree)
+		}
+		if !includeAll {
+			trees = filterTree(trees, []gig.Status{gig.StatusClosed})
 		}
 		return printJSON(trees)
 	}
@@ -162,14 +164,18 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 		return nil
 	}
 
+	var trees []*gig.Task
 	for _, t := range tasks {
 		tree, err := store.GetTree(t.ID)
 		if err != nil {
 			return err
 		}
-		if !includeAll {
-			tree.Children = filterTree(tree.Children, []gig.Status{gig.StatusClosed})
-		}
+		trees = append(trees, tree)
+	}
+	if !includeAll {
+		trees = filterTree(trees, []gig.Status{gig.StatusClosed})
+	}
+	for _, tree := range trees {
 		printTaskLine(tree)
 		if len(tree.Children) > 0 {
 			printSubtaskTree(tree.Children, "  ")
@@ -179,9 +185,12 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 }
 
 // filterTree recursively removes tasks with excluded statuses from the tree.
+// A task is kept if it has the excluded status but still has visible children.
 func filterTree(tasks []*gig.Task, exclude []gig.Status) []*gig.Task {
 	var result []*gig.Task
 	for _, t := range tasks {
+		t.Children = filterTree(t.Children, exclude)
+
 		excluded := false
 		for _, s := range exclude {
 			if t.Status == s {
@@ -189,8 +198,7 @@ func filterTree(tasks []*gig.Task, exclude []gig.Status) []*gig.Task {
 				break
 			}
 		}
-		if !excluded {
-			t.Children = filterTree(t.Children, exclude)
+		if !excluded || len(t.Children) > 0 {
 			result = append(result, t)
 		}
 	}

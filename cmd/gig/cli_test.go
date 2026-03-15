@@ -164,6 +164,54 @@ func TestCLI_ListAll(t *testing.T) {
 	assertContains(t, with, "Closeable task")
 }
 
+func TestCLI_TreeClosedParentOpenChild(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Parent epic", "--type", "epic", "--quiet"))
+	run(t, bin, home, "create", "Open child", "--parent", parentID)
+	run(t, bin, home, "close", parentID)
+
+	// Default tree: closed parent should still show because it has an open child.
+	out := run(t, bin, home, "list", "--tree")
+	assertContains(t, out, "Parent epic")
+	assertContains(t, out, "Open child")
+}
+
+func TestCLI_TreeClosedParentClosedChildren(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Dead epic", "--type", "epic", "--quiet"))
+	childID := strings.TrimSpace(run(t, bin, home, "create", "Done child", "--parent", parentID, "--quiet"))
+	run(t, bin, home, "close", childID)
+	run(t, bin, home, "close", parentID)
+
+	// Default tree: fully closed subtree should be hidden.
+	out := run(t, bin, home, "list", "--tree")
+	assertNotContains(t, out, "Dead epic")
+	assertNotContains(t, out, "Done child")
+
+	// With --all: both should appear.
+	out = run(t, bin, home, "list", "--tree", "--all")
+	assertContains(t, out, "Dead epic")
+	assertContains(t, out, "Done child")
+}
+
+func TestCLI_TreeDeepOpenDescendant(t *testing.T) {
+	bin, home := setupGig(t)
+
+	epicID := strings.TrimSpace(run(t, bin, home, "create", "Top epic", "--type", "epic", "--quiet"))
+	midID := strings.TrimSpace(run(t, bin, home, "create", "Mid task", "--parent", epicID, "--quiet"))
+	run(t, bin, home, "create", "Leaf task", "--parent", midID)
+	run(t, bin, home, "close", midID)
+	run(t, bin, home, "close", epicID)
+
+	// Closed epic and closed mid should show because leaf is open.
+	out := run(t, bin, home, "list", "--tree")
+	assertContains(t, out, "Top epic")
+	assertContains(t, out, "Mid task")
+	assertContains(t, out, "Leaf task")
+}
+
 func TestCLI_Close(t *testing.T) {
 	bin, home := setupGig(t)
 
