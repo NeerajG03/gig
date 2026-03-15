@@ -33,6 +33,7 @@ func createCmd() *cobra.Command {
 				Assignee:    assignee,
 				Notes:       notes,
 				Labels:      labelList,
+				CreatedBy:   actorName,
 			})
 			if err != nil {
 				return err
@@ -63,195 +64,6 @@ func createCmd() *cobra.Command {
 	_ = cmd.RegisterFlagCompletionFunc("parent", taskIDCompletion)
 
 	return cmd
-}
-
-func listCmd() *cobra.Command {
-	var status, assignee, taskType, label, parentID string
-	var priority, limit int
-	var attrFilters []string
-	var showTree, showList, showAll bool
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List tasks",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			// Resolve view mode: flag > config > default("list").
-			viewMode := "list"
-			if cfg != nil && cfg.DefaultView == "tree" {
-				viewMode = "tree"
-			}
-			if showTree {
-				viewMode = "tree"
-			}
-			if showList {
-				viewMode = "list"
-			}
-
-			// Resolve show_all: flag > config > default(false).
-			includeAll := false
-			if cfg != nil && cfg.ShowAll {
-				includeAll = true
-			}
-			if showAll {
-				includeAll = true
-			}
-
-			params := gig.ListParams{
-				Assignee: assignee,
-				Label:    label,
-				Limit:    limit,
-			}
-			if status != "" {
-				s := gig.Status(status)
-				params.Status = &s
-			}
-			if priority >= 0 {
-				p := gig.Priority(priority)
-				params.Priority = &p
-			}
-			if taskType != "" {
-				t := gig.TaskType(taskType)
-				params.Type = &t
-			}
-			if cmd.Flags().Changed("parent") {
-				params.ParentID = &parentID
-			}
-
-			// Parse --attr key=value filters.
-			if len(attrFilters) > 0 {
-				params.AttrFilter = map[string]string{}
-				for _, f := range attrFilters {
-					parts := strings.SplitN(f, "=", 2)
-					if len(parts) != 2 {
-						return fmt.Errorf("invalid --attr format %q, expected key=value", f)
-					}
-					params.AttrFilter[parts[0]] = parts[1]
-				}
-			}
-
-			// Exclude closed tasks by default (unless --all or explicit --status).
-			if !includeAll && !cmd.Flags().Changed("status") {
-				params.ExcludeStatuses = []gig.Status{gig.StatusClosed}
-			}
-
-			if viewMode == "tree" {
-				return listTree(cmd, params, includeAll)
-			}
-
-			tasks, err := store.List(params)
-			if err != nil {
-				return err
-			}
-
-			if jsonOutput {
-				return printJSON(tasks)
-			}
-
-			if quietOutput {
-				for _, t := range tasks {
-					fmt.Println(t.ID)
-				}
-				return nil
-			}
-			printTaskTable(tasks)
-			return nil
-		},
-	}
-
-	cmd.Flags().StringVar(&status, "status", "", "Filter by status")
-	cmd.Flags().StringVar(&assignee, "assignee", "", "Filter by assignee")
-	cmd.Flags().IntVar(&priority, "priority", -1, "Filter by priority")
-	cmd.Flags().StringVar(&taskType, "type", "", "Filter by type")
-	cmd.Flags().StringVar(&label, "label", "", "Filter by label")
-	cmd.Flags().StringVar(&parentID, "parent", "", "Filter by parent ID")
-	cmd.Flags().IntVar(&limit, "limit", 0, "Limit results")
-	cmd.Flags().StringArrayVar(&attrFilters, "attr", nil, "Filter by attribute (key=value, repeatable)")
-	cmd.Flags().BoolVar(&showTree, "tree", false, "Show tasks as hierarchical tree")
-	cmd.Flags().BoolVar(&showList, "list", false, "Show tasks as flat list (default)")
-	cmd.Flags().BoolVarP(&showAll, "all", "a", false, "Include closed tasks")
-	cmd.MarkFlagsMutuallyExclusive("tree", "list")
-
-	_ = cmd.RegisterFlagCompletionFunc("status", statusCompletion)
-	_ = cmd.RegisterFlagCompletionFunc("type", taskTypeCompletion)
-	_ = cmd.RegisterFlagCompletionFunc("priority", priorityCompletion)
-	_ = cmd.RegisterFlagCompletionFunc("parent", taskIDCompletion)
-
-	return cmd
-}
-
-// listTree renders tasks as a hierarchical tree.
-func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error {
-	// For tree view, show only root tasks unless --parent was explicit.
-	if !cmd.Flags().Changed("parent") {
-		rootID := ""
-		params.ParentID = &rootID
-	}
-
-	tasks, err := store.List(params)
-	if err != nil {
-		return err
-	}
-
-	if jsonOutput {
-		var trees []*gig.Task
-		for _, t := range tasks {
-			tree, err := store.GetTree(t.ID)
-			if err != nil {
-				return err
-			}
-			if !includeAll {
-				tree.Children = filterTree(tree.Children, []gig.Status{gig.StatusClosed})
-			}
-			trees = append(trees, tree)
-		}
-		return printJSON(trees)
-	}
-
-	if quietOutput {
-		for _, t := range tasks {
-			fmt.Println(t.ID)
-		}
-		return nil
-	}
-
-	if len(tasks) == 0 {
-		fmt.Println("No tasks found.")
-		return nil
-	}
-
-	for _, t := range tasks {
-		tree, err := store.GetTree(t.ID)
-		if err != nil {
-			return err
-		}
-		if !includeAll {
-			tree.Children = filterTree(tree.Children, []gig.Status{gig.StatusClosed})
-		}
-		printTaskLine(tree)
-		if len(tree.Children) > 0 {
-			printSubtaskTree(tree.Children, "  ")
-		}
-	}
-	return nil
-}
-
-// filterTree recursively removes tasks with excluded statuses from the tree.
-func filterTree(tasks []*gig.Task, exclude []gig.Status) []*gig.Task {
-	var result []*gig.Task
-	for _, t := range tasks {
-		excluded := false
-		for _, s := range exclude {
-			if t.Status == s {
-				excluded = true
-				break
-			}
-		}
-		if !excluded {
-			t.Children = filterTree(t.Children, exclude)
-			result = append(result, t)
-		}
-	}
-	return result
 }
 
 func showCmd() *cobra.Command {
@@ -299,7 +111,6 @@ func showCmd() *cobra.Command {
 				fmt.Printf("%s  %s\n", colorize(dim, "Reason:"), task.CloseReason)
 			}
 
-			// Show comments.
 			comments, _ := store.ListComments(task.ID)
 			if len(comments) > 0 {
 				fmt.Printf("\n%s (%d):\n", colorize(dim, "Comments"), len(comments))
@@ -312,7 +123,6 @@ func showCmd() *cobra.Command {
 				}
 			}
 
-			// Show dependencies.
 			deps, _ := store.ListDependencies(task.ID)
 			if len(deps) > 0 {
 				fmt.Printf("\n%s\n", colorize(dim, "Depends on:"))
@@ -335,14 +145,12 @@ func showCmd() *cobra.Command {
 				}
 			}
 
-			// Show subtask tree.
 			tree, _ := store.GetTree(task.ID)
 			if tree != nil && len(tree.Children) > 0 {
 				fmt.Printf("\n%s (%d):\n", colorize(dim, "Subtasks"), countDescendants(tree))
 				printSubtaskTree(tree.Children, "  ")
 			}
 
-			// Show custom attributes.
 			attrs, _ := store.Attrs(task.ID)
 			if len(attrs) > 0 {
 				fmt.Printf("\n%s\n", colorize(dim, "Attributes:"))
@@ -479,122 +287,6 @@ func reopenCmd() *cobra.Command {
 	}
 }
 
-func readyCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "ready",
-		Short: "Show tasks with no blockers",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			tasks, err := store.Ready()
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return printJSON(tasks)
-			}
-			if len(tasks) == 0 {
-				fmt.Println("No ready tasks.")
-				return nil
-			}
-			if quietOutput {
-				for _, t := range tasks {
-					fmt.Println(t.ID)
-				}
-				return nil
-			}
-			printTaskTable(tasks)
-			return nil
-		},
-	}
-}
-
-func blockedCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "blocked",
-		Short: "Show blocked tasks",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			tasks, err := store.Blocked()
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return printJSON(tasks)
-			}
-			if len(tasks) == 0 {
-				fmt.Println("No blocked tasks.")
-				return nil
-			}
-			if quietOutput {
-				for _, t := range tasks {
-					fmt.Println(t.ID)
-				}
-				return nil
-			}
-			printTaskTable(tasks)
-			return nil
-		},
-	}
-}
-
-func childrenCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:               "children <id>",
-		Short:             "Show subtasks of a task",
-		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: taskIDCompletion,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			tasks, err := store.Children(args[0])
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return printJSON(tasks)
-			}
-			if len(tasks) == 0 {
-				fmt.Println("No children.")
-				return nil
-			}
-			if quietOutput {
-				for _, t := range tasks {
-					fmt.Println(t.ID)
-				}
-				return nil
-			}
-			printTaskTable(tasks)
-			return nil
-		},
-	}
-}
-
-func searchCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "search <query>",
-		Short: "Search tasks by title and description",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			tasks, err := store.Search(args[0])
-			if err != nil {
-				return err
-			}
-			if jsonOutput {
-				return printJSON(tasks)
-			}
-			if len(tasks) == 0 {
-				fmt.Println("No matching tasks.")
-				return nil
-			}
-			if quietOutput {
-				for _, t := range tasks {
-					fmt.Println(t.ID)
-				}
-				return nil
-			}
-			printTaskTable(tasks)
-			return nil
-		},
-	}
-}
-
-// printTaskLine prints a single-line summary of a task with colors.
 func printTaskLine(t *gig.Task) {
 	assignee := ""
 	if t.Assignee != "" {
@@ -603,14 +295,12 @@ func printTaskLine(t *gig.Task) {
 	fmt.Printf("%s %s %s %s%s\n", colorID(t.ID), colorStatus(t.Status), colorPriority(t.Priority), t.Title, assignee)
 }
 
-// printTaskTable prints tasks in aligned columns with colors.
 func printTaskTable(tasks []*gig.Task) {
 	if len(tasks) == 0 {
 		fmt.Println("No tasks found.")
 		return
 	}
 
-	// Calculate max ID width for alignment.
 	maxID := 0
 	for _, t := range tasks {
 		if len(t.ID) > maxID {
@@ -623,7 +313,6 @@ func printTaskTable(tasks []*gig.Task) {
 		if t.Assignee != "" {
 			assignee = " " + colorAssignee(t.Assignee)
 		}
-		// Pad ID to align columns. Use raw length for padding, color codes don't count.
 		padded := fmt.Sprintf("%-*s", maxID, t.ID)
 		fmt.Printf("%s %s %s %s%s\n", colorize(dim, padded), colorStatus(t.Status), colorPriority(t.Priority), t.Title, assignee)
 	}
@@ -663,7 +352,6 @@ func priorityLabel(p gig.Priority) string {
 	}
 }
 
-// printSubtaskTree prints a recursive tree of subtasks with indentation.
 func printSubtaskTree(tasks []*gig.Task, indent string) {
 	for i, t := range tasks {
 		connector := "├── "
@@ -683,7 +371,6 @@ func printSubtaskTree(tasks []*gig.Task, indent string) {
 	}
 }
 
-// countDescendants counts all descendants in a task tree.
 func countDescendants(t *gig.Task) int {
 	count := len(t.Children)
 	for _, c := range t.Children {
