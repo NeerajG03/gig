@@ -277,6 +277,81 @@ func TestGetTree(t *testing.T) {
 	}
 }
 
+func TestListExcludeStatuses(t *testing.T) {
+	store, _ := tempDB(t)
+	store.Create(CreateParams{Title: "Open task", Priority: P1})
+	t2, _ := store.Create(CreateParams{Title: "Closed task", Priority: P2})
+	store.Create(CreateParams{Title: "In progress task", Priority: P0})
+	store.CloseTask(t2.ID, "done", "test")
+
+	// Exclude closed.
+	tasks, err := store.List(ListParams{
+		ExcludeStatuses: []Status{StatusClosed},
+	})
+	if err != nil {
+		t.Fatalf("list exclude closed: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Errorf("expected 2 non-closed tasks, got %d", len(tasks))
+	}
+	for _, task := range tasks {
+		if task.Status == StatusClosed {
+			t.Errorf("closed task %s should have been excluded", task.ID)
+		}
+	}
+
+	// Exclude multiple statuses.
+	store.UpdateStatus(tasks[0].ID, StatusBlocked, "test")
+	tasks, err = store.List(ListParams{
+		ExcludeStatuses: []Status{StatusClosed, StatusBlocked},
+	})
+	if err != nil {
+		t.Fatalf("list exclude multiple: %v", err)
+	}
+	if len(tasks) != 1 {
+		t.Errorf("expected 1 task after excluding closed+blocked, got %d", len(tasks))
+	}
+
+	// ExcludeStatuses with explicit Status filter — both apply.
+	status := StatusClosed
+	tasks, _ = store.List(ListParams{
+		Status:          &status,
+		ExcludeStatuses: []Status{StatusClosed},
+	})
+	if len(tasks) != 0 {
+		t.Errorf("expected 0 tasks when status=closed AND exclude=closed, got %d", len(tasks))
+	}
+
+	// Empty ExcludeStatuses should return all.
+	tasks, _ = store.List(ListParams{})
+	if len(tasks) != 3 {
+		t.Errorf("expected 3 total tasks, got %d", len(tasks))
+	}
+}
+
+func TestListRootTasks(t *testing.T) {
+	store, _ := tempDB(t)
+	root1, _ := store.Create(CreateParams{Title: "Root 1"})
+	root2, _ := store.Create(CreateParams{Title: "Root 2"})
+	store.Create(CreateParams{Title: "Child 1", ParentID: root1.ID})
+	store.Create(CreateParams{Title: "Child 2", ParentID: root2.ID})
+
+	// Filter to root tasks only (parent_id is empty string in DB).
+	rootID := ""
+	tasks, err := store.List(ListParams{ParentID: &rootID})
+	if err != nil {
+		t.Fatalf("list root tasks: %v", err)
+	}
+	if len(tasks) != 2 {
+		t.Errorf("expected 2 root tasks, got %d", len(tasks))
+	}
+	for _, task := range tasks {
+		if task.ParentID != "" {
+			t.Errorf("task %s has parent %q, expected root", task.ID, task.ParentID)
+		}
+	}
+}
+
 func TestReadyAndBlocked(t *testing.T) {
 	store, _ := tempDB(t)
 	blocker, _ := store.Create(CreateParams{Title: "Blocker"})
