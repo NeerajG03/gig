@@ -14,6 +14,9 @@ gig gives you task tracking with dependencies, hierarchy, events, and a built-in
 
 ```bash
 # Install
+brew install neerajg03/tap/gig
+
+# Or via Go
 go install github.com/neerajg/gig/cmd/gig@latest
 
 # Initialize
@@ -125,7 +128,10 @@ gig completion fish | source      # fish
 ## Installation
 
 ```bash
-# Go install (recommended)
+# Homebrew (recommended)
+brew install neerajg03/tap/gig
+
+# Or Go install
 go install github.com/neerajg/gig/cmd/gig@latest
 
 # Or build from source
