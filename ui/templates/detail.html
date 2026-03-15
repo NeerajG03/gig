@@ -1,0 +1,202 @@
+{{define "detail.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Task.Title}} — gig</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="/" class="logo">gig</a>
+            <span class="nav-breadcrumb">
+                <a href="/">Board</a> / {{.Task.ID}}
+            </span>
+        </div>
+        <div class="nav-right">
+            <a href="/task/{{.Task.ID}}/edit" class="btn btn-secondary">Edit</a>
+        </div>
+    </nav>
+
+    <div class="detail-layout">
+        <div class="detail-main">
+            <div class="detail-header">
+                <h1>{{.Task.Title}}</h1>
+                <div class="detail-badges">
+                    <span class="badge {{priorityClass .Task.Priority}}">{{priorityLabel .Task.Priority}}</span>
+                    <span class="badge badge-type">{{.Task.Type}}</span>
+                    <span class="badge badge-status badge-status-{{.Task.Status}}">
+                        {{statusIcon .Task.Status}} {{statusLabel .Task.Status}}
+                    </span>
+                </div>
+            </div>
+
+            {{if .Task.Description}}
+            <div class="detail-section">
+                <h3>Description</h3>
+                <p>{{.Task.Description}}</p>
+            </div>
+            {{end}}
+
+            {{if .Task.Notes}}
+            <div class="detail-section">
+                <h3>Notes</h3>
+                <p>{{.Task.Notes}}</p>
+            </div>
+            {{end}}
+
+            <!-- Children (subtasks) — mini kanban -->
+            {{if .Children}}
+            <div class="detail-section">
+                <h3>Subtasks ({{len .Children}})</h3>
+                <div class="mini-board">
+                    {{range .ChildrenColumns}}
+                    <div class="mini-column" data-status="{{.Status}}"
+                         ondragover="event.preventDefault(); this.classList.add('column-dragover');"
+                         ondragleave="this.classList.remove('column-dragover');"
+                         ondrop="dropCard(event, this);">
+                        <div class="mini-column-header" style="border-top: 2px solid {{columnColor .Status}}">
+                            <span class="mini-column-title">{{statusLabel .Status}}</span>
+                            <span class="column-count badge-status-{{.Status}}">{{len .Tasks}}</span>
+                        </div>
+                        <div class="mini-column-body"
+                             ondragover="event.preventDefault();"
+                             ondrop="dropCard(event, this.closest('.mini-column'));">
+                            {{range .Tasks}}
+                            {{template "card.html" .}}
+                            {{end}}
+                        </div>
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            <script>
+            function dropCard(event, column) {
+                event.preventDefault();
+                column.classList.remove('column-dragover');
+                var taskId = event.dataTransfer.getData('text/plain');
+                var newStatus = column.dataset.status;
+                if (!taskId || !newStatus) return;
+
+                fetch('/task/' + taskId + '/status', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: 'status=' + encodeURIComponent(newStatus)
+                }).then(function() {
+                    window.location.reload();
+                });
+            }
+            </script>
+            {{end}}
+
+            <!-- Comments -->
+            <div class="detail-section">
+                <h3>Comments</h3>
+                {{template "comments.html" .Comments}}
+
+                <form class="comment-form" hx-post="/task/{{.Task.ID}}/comment" hx-target="#comments-list" hx-swap="outerHTML">
+                    <input type="text" name="author" placeholder="Your name" class="input input-sm">
+                    <div class="comment-form-row">
+                        <input type="text" name="content" placeholder="Add a comment..." class="input" required>
+                        <button type="submit" class="btn btn-primary">Send</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Events -->
+            {{if .Events}}
+            <div class="detail-section">
+                <h3>Activity</h3>
+                <div class="events-list">
+                    {{range .Events}}
+                    <div class="event-item">
+                        <span class="event-time">{{.Timestamp.Format "Jan 2, 15:04"}}</span>
+                        <span class="event-type">{{.Type}}</span>
+                        {{if .Field}}
+                        <span class="muted">{{.Field}}: {{.OldValue}} → {{.NewValue}}</span>
+                        {{end}}
+                        {{if .Actor}}<span class="muted">by {{.Actor}}</span>{{end}}
+                    </div>
+                    {{end}}
+                </div>
+            </div>
+            {{end}}
+        </div>
+
+        <div class="detail-sidebar">
+            <!-- Meta info -->
+            <div class="sidebar-section">
+                <h4>Details</h4>
+                <dl class="meta-list">
+                    <dt>ID</dt><dd>{{.Task.ID}}</dd>
+                    <dt>Status</dt><dd>{{statusLabel .Task.Status}}</dd>
+                    <dt>Priority</dt><dd>{{.Task.Priority}}</dd>
+                    <dt>Type</dt><dd>{{.Task.Type}}</dd>
+                    {{if .Task.Assignee}}<dt>Assignee</dt><dd>@{{.Task.Assignee}}</dd>{{end}}
+                    {{if .Task.ParentID}}<dt>Parent</dt><dd><a href="/task/{{.Task.ParentID}}">{{.Task.ParentID}}</a></dd>{{end}}
+                    {{if .Task.Labels}}<dt>Labels</dt><dd>{{range .Task.Labels}}<span class="label">{{.}}</span> {{end}}</dd>{{end}}
+                    <dt>Created</dt><dd>{{.Task.CreatedAt.Format "Jan 2, 2006 15:04"}}</dd>
+                    <dt>Updated</dt><dd>{{.Task.UpdatedAt.Format "Jan 2, 2006 15:04"}}</dd>
+                    {{if .Task.ClosedAt}}<dt>Closed</dt><dd>{{.Task.ClosedAt.Format "Jan 2, 2006 15:04"}}</dd>{{end}}
+                    {{if .Task.CloseReason}}<dt>Reason</dt><dd>{{.Task.CloseReason}}</dd>{{end}}
+                </dl>
+            </div>
+
+            <!-- Actions -->
+            <div class="sidebar-section">
+                <h4>Actions</h4>
+
+                {{if ne .Task.Status "closed"}}
+                <form hx-post="/task/{{.Task.ID}}/status" hx-target="body" class="action-form">
+                    <label>Change Status</label>
+                    <select name="status" onchange="this.form.requestSubmit()">
+                        <option value="">-- select --</option>
+                        <option value="open">Open</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="blocked">Blocked</option>
+                        <option value="deferred">Deferred</option>
+                    </select>
+                </form>
+
+                <form hx-post="/task/{{.Task.ID}}/close" hx-target="body" class="action-form">
+                    <button type="submit" class="btn btn-danger btn-full">Close Task</button>
+                </form>
+                {{else}}
+                <form hx-post="/task/{{.Task.ID}}/reopen" hx-target="body" class="action-form">
+                    <button type="submit" class="btn btn-secondary btn-full">Reopen Task</button>
+                </form>
+                {{end}}
+            </div>
+
+            <!-- Dependencies -->
+            {{if .DepsOn}}
+            <div class="sidebar-section">
+                <h4>Depends On</h4>
+                {{range .DepsOn}}
+                <a href="/task/{{.Task.ID}}" class="dep-link">
+                    <span style="color: {{columnColor .Task.Status}}">{{statusIcon .Task.Status}}</span>
+                    {{.Task.Title}}
+                </a>
+                {{end}}
+            </div>
+            {{end}}
+
+            {{if .Blocks}}
+            <div class="sidebar-section">
+                <h4>Blocks</h4>
+                {{range .Blocks}}
+                <a href="/task/{{.Task.ID}}" class="dep-link">
+                    <span style="color: {{columnColor .Task.Status}}">{{statusIcon .Task.Status}}</span>
+                    {{.Task.Title}}
+                </a>
+                {{end}}
+            </div>
+            {{end}}
+        </div>
+    </div>
+</body>
+</html>
+{{end}}
