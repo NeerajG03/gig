@@ -292,7 +292,7 @@ func (s *Store) List(p ListParams) ([]*Task, error) {
 	}
 	if p.ParentID != nil {
 		if *p.ParentID == "" {
-			where = append(where, "parent_id IS NULL")
+			where = append(where, "(parent_id IS NULL OR parent_id = '')")
 		} else {
 			where = append(where, "parent_id = ?")
 			args = append(args, *p.ParentID)
@@ -309,6 +309,14 @@ func (s *Store) List(p ListParams) ([]*Task, error) {
 	for k, v := range p.AttrFilter {
 		where = append(where, "id IN (SELECT task_id FROM custom_attributes WHERE key = ? AND value = ?)")
 		args = append(args, k, v)
+	}
+	if len(p.ExcludeStatuses) > 0 {
+		placeholders := make([]string, len(p.ExcludeStatuses))
+		for i, s := range p.ExcludeStatuses {
+			placeholders[i] = "?"
+			args = append(args, string(s))
+		}
+		where = append(where, "status NOT IN ("+strings.Join(placeholders, ",")+")")
 	}
 
 	query := `SELECT id, parent_id, title, description, status, priority, assignee,

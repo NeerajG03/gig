@@ -10,11 +10,13 @@ import (
 
 // Config represents the gig.yaml configuration file.
 type Config struct {
-	Prefix   string     `yaml:"prefix"`
-	DBPath   string     `yaml:"db_path"`
-	HashLen  int        `yaml:"hash_length"`
-	SyncRepo string     `yaml:"sync_repo"`
-	Hooks    HookConfig `yaml:"hooks"`
+	Prefix      string     `yaml:"prefix"`
+	DBPath      string     `yaml:"db_path"`
+	HashLen     int        `yaml:"hash_length"`
+	SyncRepo    string     `yaml:"sync_repo"`
+	DefaultView string     `yaml:"default_view"` // "list" or "tree" (default: "list")
+	ShowAll     bool       `yaml:"show_all"`     // if true, include closed tasks by default
+	Hooks       HookConfig `yaml:"hooks"`
 }
 
 // HookConfig maps event types to lists of hook definitions.
@@ -94,6 +96,9 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	if cfg.HashLen < 3 || cfg.HashLen > 8 {
 		cfg.HashLen = 4
+	}
+	if cfg.DefaultView != "" && cfg.DefaultView != "list" && cfg.DefaultView != "tree" {
+		cfg.DefaultView = ""
 	}
 
 	return &cfg, nil
