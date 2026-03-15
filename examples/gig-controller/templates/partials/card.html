@@ -1,0 +1,15 @@
+{{define "card.html"}}
+<a href="/task/{{.ID}}" class="card status-{{.Status}}" draggable="true" data-task-id="{{.ID}}"
+   ondragstart="event.dataTransfer.setData('text/plain', this.dataset.taskId); this.classList.add('dragging');"
+   ondragend="this.classList.remove('dragging');">
+    <div class="card-header">
+        <span class="badge {{priorityClass .Priority}}">{{priorityLabel .Priority}}</span>
+        <span class="card-type">{{.Type}}</span>
+    </div>
+    <div class="card-title">{{.Title}}</div>
+    <div class="card-footer">
+        <span class="card-id">{{.ID}}</span>
+        {{if .Assignee}}<span class="card-assignee">@{{.Assignee}}</span>{{end}}
+    </div>
+</a>
+{{end}}
