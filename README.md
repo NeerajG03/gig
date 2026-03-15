@@ -1,55 +1,83 @@
 # gig
 
-A lightweight, embeddable task management system written in Go. Use it as a CLI tool or import it as a Go SDK into your own applications.
+**Lightweight, embeddable task management system for Go — CLI + SDK backed by SQLite.**
 
-## Install
+**Platforms:** macOS, Linux, Windows
 
-```bash
-# From source
-go install github.com/neerajg/gig/cmd/gig@latest
+[![License](https://img.shields.io/github/license/NeerajG03/gig)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/neerajg/gig)](https://goreportcard.com/report/github.com/neerajg/gig)
+[![Test](https://github.com/NeerajG03/gig/actions/workflows/test.yml/badge.svg)](https://github.com/NeerajG03/gig/actions/workflows/test.yml)
 
-# Or build locally
-git clone https://github.com/neerajg/gig.git
-cd gig && go build -o gig ./cmd/gig/
-```
+gig gives you task tracking with dependencies, hierarchy, events, and a built-in web UI — all in a single binary with zero runtime dependencies. Use it as a standalone CLI or import it as a Go SDK into your own applications.
 
 ## Quick Start
 
 ```bash
-gig init --prefix myapp          # Creates ~/.gig/ with config + database
+# Install
+go install github.com/neerajg/gig/cmd/gig@latest
+
+# Initialize
+gig init --prefix myapp
+
+# Start tracking
 gig create "Fix login bug" --type bug --priority 1 --assignee neeraj
 gig create "Add OAuth" --type feature --priority 2
 gig list
 gig show myapp-a3f8
-gig comment myapp-a3f8 "Investigating root cause"
-gig update myapp-a3f8 --claim --assignee neeraj
 gig close myapp-a3f8 --reason "Fixed in commit abc123"
-gig stats
 ```
 
 ## Features
 
-- **Task CRUD** — create, list, show, update, close, reopen, search
-- **Tree hierarchy** — parent/child tasks via `--parent` with ladder IDs (`gig-a3f8.1`, `.2`, `.3`)
-- **Custom attributes** — typed key-value pairs (string, boolean, object) on tasks with schema registry
-- **Dependency DAG** — `gig dep add/remove/tree/cycles` with cycle detection
-- **Colored output** — ANSI colors for status, priority, and assignee (respects `NO_COLOR`)
-- **Table formatting** — aligned columns in `gig list`, `gig ready`, `gig blocked`
-- **Subtask tree** — `gig show` displays full subtask hierarchy as an ASCII tree
-- **`--actor` flag** — global flag to attribute events to agents/users (`--actor agent-coder`)
-- **Web UI** — built-in kanban board via `gig ui` (drag-and-drop, status colors, subtask boards)
-- **Event log** — every mutation recorded, queryable via `gig events <id>`
-- **Hook system** — shell commands triggered on status changes (configurable in `gig.yaml`)
-- **JSONL sync** — export/import for backup or git-based sync
-- **JSON output** — `--json` flag on all query commands for programmatic use
-- **SDK-first** — the CLI is a thin wrapper; import `github.com/neerajg/gig` in any Go app
+- **SDK-first** — the CLI is a thin wrapper; import `github.com/neerajg/gig` in any Go app.
+- **Pure Go SQLite** — single binary, no CGO, no runtime dependencies. Uses [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite).
+- **Task hierarchy** — parent/child tasks with ladder IDs (`gig-a3f8.1`, `.1.1`). Full tree view via `gig list --tree`.
+- **Dependency DAG** — `gig dep add/remove/tree/cycles` with automatic cycle detection.
+- **Custom attributes** — typed key-value metadata (string, boolean, JSON object) with a schema registry.
+- **Event system** — every mutation recorded. SDK callbacks, shell hooks, queryable audit log.
+- **Web UI** — built-in kanban board via `gig ui` with drag-and-drop status changes.
+- **Agent-friendly** — `--json` output on all commands, `--actor` flag for attribution, `--quiet` for scripting.
+- **Shell completions** — dynamic tab-completion for task IDs, flags, and attribute keys (bash/zsh/fish).
+- **JSONL sync** — export/import for backup or git-based collaboration.
+
+## Essential Commands
+
+| Command | Action |
+|---------|--------|
+| `gig create "Title" --priority 1` | Create a task. |
+| `gig list` | List open tasks (table view). |
+| `gig list --tree` | Hierarchical tree view. |
+| `gig show <id>` | Task details, comments, deps, subtree. |
+| `gig update <id> --claim` | Atomically claim a task (sets assignee + in_progress). |
+| `gig close <id> --reason "done"` | Close a task. |
+| `gig dep add <task> <blocker>` | Add a dependency. |
+| `gig ready` | Tasks with no unresolved blockers. |
+| `gig search <query>` | Search titles and descriptions. |
+| `gig config set <key> <value>` | Update configuration. |
+| `gig ui` | Launch web kanban board. |
+
+## Hierarchy & IDs
+
+gig uses hierarchical IDs for structured task breakdown:
+
+- `myapp-a3f8` — Epic
+- `myapp-a3f8.1` — Task
+- `myapp-a3f8.1.1` — Subtask
+
+Create subtasks with `--parent`:
+
+```bash
+gig create "Design API" --type epic
+gig create "Implement endpoints" --parent myapp-a3f8
+gig create "Write tests" --parent myapp-a3f8
+```
 
 ## SDK Usage
 
 ```go
 import "github.com/neerajg/gig"
 
-store, _ := gig.Open("~/.gig/gig.db", gig.WithPrefix("myapp"))
+store, _ := gig.Open("tasks.db", gig.WithPrefix("myapp"))
 defer store.Close()
 
 task, _ := store.Create(gig.CreateParams{
@@ -65,98 +93,54 @@ store.On(gig.EventStatusChanged, func(e gig.Event) {
 store.UpdateStatus(task.ID, gig.StatusInProgress, "agent-1")
 ```
 
-## CLI Reference
-
-```
-gig init [--prefix NAME]
-gig create <title> [--desc --type --priority --parent --assignee --labels]
-gig list [--status --assignee --priority --type --label --parent --attr key=val --limit --tree --list --all --json --quiet]
-gig show <id> [--json]
-gig update <id> [--title --desc --status --priority --assignee --notes --labels --claim]
-gig close <id> [id2...] [--reason]
-gig reopen <id>
-gig comment <id> <message> [--author]
-gig comments <id>
-gig dep add <task> <depends-on>
-gig dep remove <task> <depends-on>
-gig dep list <id>
-gig dep tree <id>
-gig dep cycles
-gig attr define <key> --type <string|boolean|object> [--description "..."]
-gig attr undefine <key>
-gig attr types
-gig attr set <task-id> <key> <value>
-gig attr get <task-id> <key>
-gig attr list <task-id>
-gig attr delete <task-id> <key>
-gig search <query>
-gig ready
-gig blocked
-gig children <id>
-gig export [--file]
-gig import [--file]
-gig sync
-gig events <id>
-gig stats
-gig config                                          # show current config
-gig config set <key> <value>                        # set a config value
-gig doctor
-gig ui [--port 9741]
-gig completion [bash|zsh|fish]
-```
-
-### Shell Completions
-
-Tab-complete commands, task IDs, flag values, and attribute keys:
-
-```bash
-# bash
-source <(gig completion bash)
-
-# zsh
-source <(gig completion zsh)
-
-# fish
-gig completion fish | source
-```
-
 ## Configuration
 
-All data lives centrally in `~/.gig/` (override with `GIG_HOME` env var):
+All data lives in `~/.gig/` (override with `GIG_HOME` env var):
 
 ```
 ~/.gig/
-├── gig.db          # SQLite database (gitignored)
+├── gig.db          # SQLite database
 ├── gig.yaml        # Configuration
-├── tasks.jsonl     # Exported tasks (for sync/backup)
+├── tasks.jsonl     # Exported tasks (for sync)
 └── events.jsonl    # Exported event history
 ```
 
-Example `gig.yaml`:
-
-```yaml
-prefix: "myapp"         # ID prefix (default: "gig")
-hash_length: 4          # ID hash length, 3-8 (default: 4)
-default_view: tree      # "list" (default) or "tree" for gig list
-show_all: false         # true to include closed tasks by default
-hooks:
-  on_status_change: [...]
-```
-
-Set config from CLI:
+Configure via CLI or YAML:
 
 ```bash
-gig config set default_view tree
-gig config set show_all true
-gig config set prefix myapp
-gig config set hash_length 6
+gig config set default_view tree    # "list" or "tree"
+gig config set show_all true        # include closed tasks
+gig config set prefix myapp         # ID prefix
+gig config set hash_length 6        # ID hash length (3-8)
 ```
 
-CLI flags (`--tree`, `--list`, `--all`) override config values.
+## Shell Completions
 
-## Part of JumpStreet
+```bash
+source <(gig completion bash)     # bash
+source <(gig completion zsh)      # zsh
+gig completion fish | source      # fish
+```
 
-gig is the task engine for [JumpStreet](https://github.com/neerajg/jump-street), a CLI-based AI agent orchestration platform. JumpStreet imports gig as a Go dependency.
+## Installation
+
+```bash
+# Go install (recommended)
+go install github.com/neerajg/gig/cmd/gig@latest
+
+# Or build from source
+git clone https://github.com/NeerajG03/gig.git
+cd gig && go build -o gig ./cmd/gig/
+```
+
+**Requirements:** Go 1.21+
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — system design, data flow, schema
+- [SDK Reference](docs/sdk-reference.md) — full API documentation
+- [Roadmap](docs/roadmap.md) — what's done and what's next
+- [Security](SECURITY.md) — vulnerability reporting and scope
 
 ## License
 
