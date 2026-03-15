@@ -72,6 +72,6 @@ go vet ./...                    # Static analysis
 
 - Don't add CGO dependencies — the pure-Go SQLite constraint is intentional
 - Don't put business logic in `cmd/gig/` — keep it in root package SDK functions
-- Don't scan `time.Time` directly from SQLite — always scan as string, parse with `strToTime()`
+- Don't scan `time.Time` directly from SQLite — always scan as string, parse with `strToTime()`. The pure-Go SQLite driver returns timestamps as strings, not `time.Time`. Scanning into `time.Time` compiles but fails at runtime with `unsupported Scan, storing driver.Value type string into type *time.Time`. See `comment_test.go:TestListCommentsCreatedAtParsed` for the regression test.
 - Don't break JSONL format without a major version bump — it's the sync contract
 - Don't remove columns from migrations — only add (forward-compatible)

@@ -50,8 +50,12 @@ func (s *Store) ListComments(taskID string) ([]*Comment, error) {
 	var comments []*Comment
 	for rows.Next() {
 		var c Comment
-		if err := rows.Scan(&c.ID, &c.TaskID, &c.Author, &c.Content, &c.CreatedAt); err != nil {
+		var createdAt string
+		if err := rows.Scan(&c.ID, &c.TaskID, &c.Author, &c.Content, &createdAt); err != nil {
 			return nil, fmt.Errorf("scan comment: %w", err)
+		}
+		if t := strToTime(createdAt); t != nil {
+			c.CreatedAt = *t
 		}
 		comments = append(comments, &c)
 	}
