@@ -134,6 +134,7 @@ The `ui/` package provides a drag-and-drop kanban board:
 - Embedded via `embed.FS` — no external files at runtime
 - Usable as `gig ui` CLI command or as `ui.New(store).ListenAndServe(addr)` in Go apps
 - Features: board view with top-level/all filter, task detail with mini kanban for subtasks, drag-and-drop status changes, HTMX-powered interactions
+- **No authentication**: The web UI has no auth layer. This is acceptable for a local task tool — it binds to `localhost` by default. If exposing on a network, put it behind a reverse proxy with auth.
 
 ## Event System
 
@@ -189,6 +190,8 @@ Central location: `~/.gig/gig.yaml` (override with `GIG_HOME` env var)
 prefix: "gig"                    # ID prefix
 db_path: "/Users/x/.gig/gig.db" # Database location
 hash_length: 4                   # ID hash length (3-8)
+default_view: "list"             # "list" or "tree" — default for gig list
+show_all: false                  # true to include closed tasks in list by default
 sync_repo: ""                    # Optional git repo for sync
 hooks:                           # Shell hooks by event type
   on_status_change: [...]
@@ -197,3 +200,5 @@ hooks:                           # Shell hooks by event type
   on_close: [...]
   on_assign: [...]
 ```
+
+CLI flags (`--tree`, `--list`, `--all`) override config values. Resolution: flag > config > default.
