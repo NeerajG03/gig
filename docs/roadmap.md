@@ -41,7 +41,7 @@
 - [x] **Tree view in list**: `gig list --tree` renders hierarchical ASCII tree, `--all` includes closed tasks
 - [x] **Config-driven defaults**: `default_view` (list/tree) and `show_all` in `gig.yaml`, CLI flags override
 - [x] **ExcludeStatuses filter**: SDK-level status exclusion in `ListParams`
-- [ ] **Homebrew tap**: `brew install neerajg/tap/gig`
+- [x] **Homebrew tap**: `brew install neerajg03/tap/gig`
 - [x] **Config validation**: `gig doctor` warns on invalid config values
 - [x] **More test coverage**: hooks, config, events, doctor, E2E edge cases
 
