@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var version = "dev"
+
 var (
 	jsonOutput  bool
 	quietOutput bool
@@ -18,9 +20,10 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "gig",
-		Short: "A lightweight task management system",
-		Long:  "gig — task management CLI & SDK. Tracks tasks, dependencies, and events with SQLite.",
+		Use:     "gig",
+		Short:   "A lightweight task management system",
+		Long:    "gig — task management CLI & SDK. Tracks tasks, dependencies, and events with SQLite.",
+		Version: version,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Skip store init for commands that don't need it.
 			if cmd.Name() == "init" || cmd.Name() == "completion" {
