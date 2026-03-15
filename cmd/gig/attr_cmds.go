@@ -57,14 +57,17 @@ func attrDefineCmd() *cobra.Command {
 	cmd.Flags().StringVar(&attrType, "type", "string", "Attribute type: string, boolean, object")
 	cmd.Flags().StringVar(&description, "description", "", "Description of the attribute")
 
+	_ = cmd.RegisterFlagCompletionFunc("type", attrTypeCompletion)
+
 	return cmd
 }
 
 func attrUndefineCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "undefine <key>",
-		Short: "Remove an attribute definition and all its values",
-		Args:  cobra.ExactArgs(1),
+		Use:               "undefine <key>",
+		Short:             "Remove an attribute definition and all its values",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: attrKeyCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := store.UndefineAttr(args[0]); err != nil {
 				return err
@@ -113,6 +116,16 @@ func attrSetCmd() *cobra.Command {
 		Use:   "set <task-id> <key> <value>",
 		Short: "Set a custom attribute on a task",
 		Args:  cobra.ExactArgs(3),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			switch len(args) {
+			case 0:
+				return taskIDCompletion(cmd, args, toComplete)
+			case 1:
+				return attrKeyCompletion(cmd, args, toComplete)
+			default:
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			taskID, key, value := args[0], args[1], args[2]
 			if err := store.SetAttr(taskID, key, value); err != nil {
@@ -131,6 +144,16 @@ func attrGetCmd() *cobra.Command {
 		Use:   "get <task-id> <key>",
 		Short: "Get a custom attribute value",
 		Args:  cobra.ExactArgs(2),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			switch len(args) {
+			case 0:
+				return taskIDCompletion(cmd, args, toComplete)
+			case 1:
+				return attrKeyCompletion(cmd, args, toComplete)
+			default:
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			attr, err := store.GetAttr(args[0], args[1])
 			if err != nil {
@@ -151,9 +174,10 @@ func attrGetCmd() *cobra.Command {
 
 func attrListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <task-id>",
-		Short: "List all custom attributes on a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "list <task-id>",
+		Short:             "List all custom attributes on a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			attrs, err := store.Attrs(args[0])
 			if err != nil {
@@ -186,6 +210,16 @@ func attrDeleteCmd() *cobra.Command {
 		Use:   "delete <task-id> <key>",
 		Short: "Remove a custom attribute from a task",
 		Args:  cobra.ExactArgs(2),
+		ValidArgsFunction: func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			switch len(args) {
+			case 0:
+				return taskIDCompletion(cmd, args, toComplete)
+			case 1:
+				return attrKeyCompletion(cmd, args, toComplete)
+			default:
+				return nil, cobra.ShellCompDirectiveNoFileComp
+			}
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := store.DeleteAttr(args[0], args[1]); err != nil {
 				return err

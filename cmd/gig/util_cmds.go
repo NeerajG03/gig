@@ -54,9 +54,10 @@ func initCmd() *cobra.Command {
 
 func eventsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "events <id>",
-		Short: "Show event history for a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "events <id>",
+		Short:             "Show event history for a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			events, err := store.Events(args[0])
 			if err != nil {
