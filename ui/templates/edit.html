@@ -1,0 +1,69 @@
+{{define "edit.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit {{.Task.Title}} — gig</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="/" class="logo">gig</a>
+            <span class="nav-breadcrumb">
+                <a href="/">Board</a> / <a href="/task/{{.Task.ID}}">{{.Task.ID}}</a> / Edit
+            </span>
+        </div>
+    </nav>
+
+    <div class="form-container">
+        <h2>Edit Task</h2>
+        <form method="POST" action="/task/{{.Task.ID}}/edit" class="task-form">
+            <div class="form-group">
+                <label for="title">Title</label>
+                <input type="text" id="title" name="title" class="input" value="{{.Task.Title}}" required>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" class="input textarea" rows="3">{{.Task.Description}}</textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="priority">Priority</label>
+                    <select id="priority" name="priority" class="input">
+                        <option value="0" {{if eq .Task.Priority 0}}selected{{end}}>P0 — Critical</option>
+                        <option value="1" {{if eq .Task.Priority 1}}selected{{end}}>P1 — High</option>
+                        <option value="2" {{if eq .Task.Priority 2}}selected{{end}}>P2 — Medium</option>
+                        <option value="3" {{if eq .Task.Priority 3}}selected{{end}}>P3 — Low</option>
+                        <option value="4" {{if eq .Task.Priority 4}}selected{{end}}>P4 — Backlog</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="assignee">Assignee</label>
+                    <input type="text" id="assignee" name="assignee" class="input" value="{{.Task.Assignee}}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="labels">Labels</label>
+                <input type="text" id="labels" name="labels" class="input" value="{{range $i, $l := .Task.Labels}}{{if $i}}, {{end}}{{$l}}{{end}}">
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" class="input textarea" rows="3">{{.Task.Notes}}</textarea>
+            </div>
+
+            <div class="form-actions">
+                <a href="/task/{{.Task.ID}}" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
+{{end}}

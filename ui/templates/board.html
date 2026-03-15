@@ -1,0 +1,72 @@
+{{define "board.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gig controller</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="/" class="logo">gig</a>
+            <span class="nav-stats">{{.TotalCount}} tasks &middot; {{.ReadyCount}} ready</span>
+        </div>
+        <div class="nav-right">
+            <div class="view-toggle">
+                <a href="/?view=top" class="btn btn-toggle {{if eq .View "top"}}btn-toggle-active{{end}}">Top-Level</a>
+                <a href="/?view=all" class="btn btn-toggle {{if eq .View "all"}}btn-toggle-active{{end}}">All Tasks</a>
+            </div>
+            <a href="/new" class="btn btn-primary">+ New Task</a>
+        </div>
+    </nav>
+
+    <div class="board" id="board">
+        {{range .Columns}}
+        <div class="column" data-status="{{.Status}}"
+             ondragover="event.preventDefault(); this.classList.add('column-dragover');"
+             ondragleave="this.classList.remove('column-dragover');"
+             ondrop="dropCard(event, this);">
+            <div class="column-header" style="border-top: 3px solid {{columnColor .Status}}">
+                <span class="column-title">
+                    <span class="column-dot" style="background: {{columnColor .Status}}"></span>
+                    {{statusLabel .Status}}
+                </span>
+                <span class="column-count badge-status-{{.Status}}">{{len .Tasks}}</span>
+            </div>
+            <div class="column-body"
+                 ondragover="event.preventDefault();"
+                 ondrop="dropCard(event, this.closest('.column'));">
+                {{range .Tasks}}
+                {{template "card.html" .}}
+                {{end}}
+                {{if not .Tasks}}
+                <div class="empty-column">No tasks</div>
+                {{end}}
+            </div>
+        </div>
+        {{end}}
+    </div>
+
+    <script>
+    function dropCard(event, column) {
+        event.preventDefault();
+        column.classList.remove('column-dragover');
+        var taskId = event.dataTransfer.getData('text/plain');
+        var newStatus = column.dataset.status;
+        if (!taskId || !newStatus) return;
+
+        fetch('/task/' + taskId + '/status', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'status=' + encodeURIComponent(newStatus)
+        }).then(function() {
+            window.location.reload();
+        });
+    }
+    </script>
+</body>
+</html>
+{{end}}
