@@ -264,6 +264,7 @@ type ListParams struct {
 	Type     *TaskType
 	Label      string
 	AttrFilter map[string]string // filter by custom attributes: key→value
-	Limit      int
-	Offset     int
+	ExcludeStatuses []Status // tasks with these statuses are excluded
+	Limit           int
+	Offset          int
 }

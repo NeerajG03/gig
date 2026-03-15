@@ -13,6 +13,7 @@ var (
 	quietOutput bool
 	actorName   string
 	store       *gig.Store
+	cfg         *gig.Config
 )
 
 func main() {
@@ -25,7 +26,8 @@ func main() {
 			if cmd.Name() == "init" || cmd.Name() == "completion" {
 				return nil
 			}
-			cfg, err := gig.LoadConfig("")
+			var err error
+			cfg, err = gig.LoadConfig("")
 			if err != nil {
 				return fmt.Errorf("load config: %w", err)
 			}
