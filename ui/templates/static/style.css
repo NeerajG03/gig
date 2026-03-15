@@ -380,7 +380,7 @@ a:hover { text-decoration: underline; }
 .input-sm { padding: 4px 8px; font-size: 12px; max-width: 160px; }
 .textarea { resize: vertical; }
 
-select.input { cursor: pointer; }
+select.input { cursor: pointer; max-width: 350px; text-overflow: ellipsis; }
 
 .form-actions { display: flex; gap: 8px; justify-content: flex-end; padding-top: 8px; }
 

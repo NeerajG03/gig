@@ -65,7 +65,7 @@
                     <select id="parent" name="parent" class="input">
                         <option value="">None</option>
                         {{range .AllTasks}}
-                        <option value="{{.ID}}">{{.ID}} — {{.Title}}</option>
+                        <option value="{{.ID}}" {{if eq .ID $.PreselectedParent}}selected{{end}}>{{.ID}} — {{truncate .Title 40}}</option>
                         {{end}}
                     </select>
                 </div>
