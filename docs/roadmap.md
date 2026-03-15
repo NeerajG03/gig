@@ -32,12 +32,13 @@
 
 ### v0.2.0 — Polish & Distribution
 
+- [x] **`gig search`** CLI command (wires up SDK `Search()`)
+- [x] **Colored output**: ANSI colors for status, priority, assignee (respects `NO_COLOR`, auto-disables when piped)
+- [x] **Table formatting**: aligned columns for `gig list`, `gig ready`, `gig blocked`
+- [x] **`--actor` flag**: global flag to set actor name for events (default: "cli")
+- [x] **Subtask tree in show**: `gig show` displays recursive ASCII tree of all descendants
 - [ ] **Homebrew tap**: `brew install neerajg/tap/gig`
 - [ ] **Shell completions**: bash/zsh/fish via cobra's built-in generator
-- [ ] **`gig search`** CLI command (SDK `Search()` exists, CLI missing)
-- [ ] **Colored output**: status icons with ANSI colors in terminal
-- [ ] **Table formatting**: aligned columns for `gig list` output
-- [ ] **`--actor` flag**: global flag to set actor name for events (instead of hardcoded "cli")
 - [ ] **Config validation**: `gig doctor` warns on invalid config values
 - [ ] **More test coverage**: config, hooks, edge cases
 

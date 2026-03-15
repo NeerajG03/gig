@@ -22,8 +22,9 @@ gig/
 │   ├── server.go       # HTTP server, handlers, template funcs — ui.New(store)
 │   └── templates/      # HTML templates + CSS (embedded via embed.FS)
 ├── cmd/gig/            # CLI (cobra) — thin wrapper over SDK
-│   ├── main.go         # Root command, store lifecycle, --json/--quiet flags
-│   ├── task_cmds.go    # create, list, show, update, close, reopen, ready, blocked, children
+│   ├── main.go         # Root command, store lifecycle, --json/--quiet/--actor flags
+│   ├── task_cmds.go    # create, list, show, update, close, reopen, ready, blocked, children, search
+│   ├── color.go        # ANSI color output, terminal detection, NO_COLOR support
 │   ├── attr_cmds.go    # attr define/undefine/types/set/get/list/delete
 │   ├── dep_cmds.go     # dep add/remove/list/tree/cycles
 │   ├── comment_cmds.go # comment, comments
@@ -59,6 +60,8 @@ go vet ./...                    # Static analysis
 - **JSONL for sync**: The `.db` file is never committed to git. Only deterministically-sorted JSONL files are synced. Import uses `ON CONFLICT ... DO UPDATE` (upsert) with FK checks temporarily disabled for parent ordering.
 - **Custom attributes are two-layer**: Definitions registry (what keys exist + their types) → per-task values. FK constraint enforces you can't set an undefined key.
 - **Web UI is embedded**: `ui/` package uses Go's `embed.FS` to bake templates into the binary. No external files needed at runtime.
+- **Colored output**: Uses ANSI escape codes via `golang.org/x/term` for terminal detection. Respects `NO_COLOR` env var. Colors auto-disable when piped. All color logic lives in `cmd/gig/color.go`.
+- **`--actor` flag**: Global CLI flag that sets the actor name in events. Defaults to `"cli"`. Used by JumpStreet agents to attribute actions (`--actor agent-coder`).
 
 ## Conventions
 

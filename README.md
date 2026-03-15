@@ -33,6 +33,10 @@ gig stats
 - **Tree hierarchy** — parent/child tasks via `--parent` with ladder IDs (`gig-a3f8.1`, `.2`, `.3`)
 - **Custom attributes** — typed key-value pairs (string, boolean, object) on tasks with schema registry
 - **Dependency DAG** — `gig dep add/remove/tree/cycles` with cycle detection
+- **Colored output** — ANSI colors for status, priority, and assignee (respects `NO_COLOR`)
+- **Table formatting** — aligned columns in `gig list`, `gig ready`, `gig blocked`
+- **Subtask tree** — `gig show` displays full subtask hierarchy as an ASCII tree
+- **`--actor` flag** — global flag to attribute events to agents/users (`--actor agent-coder`)
 - **Web UI** — built-in kanban board via `gig ui` (drag-and-drop, status colors, subtask boards)
 - **Event log** — every mutation recorded, queryable via `gig events <id>`
 - **Hook system** — shell commands triggered on status changes (configurable in `gig.yaml`)
@@ -85,6 +89,7 @@ gig attr set <task-id> <key> <value>
 gig attr get <task-id> <key>
 gig attr list <task-id>
 gig attr delete <task-id> <key>
+gig search <query>
 gig ready
 gig blocked
 gig children <id>

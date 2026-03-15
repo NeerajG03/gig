@@ -112,18 +112,13 @@ func listCmd() *cobra.Command {
 				return printJSON(tasks)
 			}
 
-			if len(tasks) == 0 {
-				fmt.Println("No tasks found.")
+			if quietOutput {
+				for _, t := range tasks {
+					fmt.Println(t.ID)
+				}
 				return nil
 			}
-
-			for _, t := range tasks {
-				if quietOutput {
-					fmt.Println(t.ID)
-					continue
-				}
-				printTaskLine(t)
-			}
+			printTaskTable(tasks)
 			return nil
 		},
 	}
@@ -155,87 +150,84 @@ func showCmd() *cobra.Command {
 				return printJSON(task)
 			}
 
-			fmt.Printf("ID:          %s\n", task.ID)
-			fmt.Printf("Title:       %s\n", task.Title)
-			fmt.Printf("Status:      %s\n", task.Status)
-			fmt.Printf("Priority:    %s\n", task.Priority)
-			fmt.Printf("Type:        %s\n", task.Type)
+			fmt.Printf("%s  %s\n", colorize(dim, "ID:"), colorID(task.ID))
+			fmt.Printf("%s   %s\n", colorize(dim, "Title:"), task.Title)
+			fmt.Printf("%s  %s %s\n", colorize(dim, "Status:"), colorStatus(task.Status), string(task.Status))
+			fmt.Printf("%s %s\n", colorize(dim, "Priority:"), colorPriority(task.Priority)+" "+colorize(dim, priorityLabel(task.Priority)))
+			fmt.Printf("%s    %s\n", colorize(dim, "Type:"), task.Type)
 			if task.Assignee != "" {
-				fmt.Printf("Assignee:    %s\n", task.Assignee)
+				fmt.Printf("%s %s\n", colorize(dim, "Assignee:"), colorAssignee(task.Assignee))
 			}
 			if task.ParentID != "" {
-				fmt.Printf("Parent:      %s\n", task.ParentID)
+				fmt.Printf("%s  %s\n", colorize(dim, "Parent:"), colorID(task.ParentID))
 			}
 			if task.Description != "" {
-				fmt.Printf("Description: %s\n", task.Description)
+				fmt.Printf("%s    %s\n", colorize(dim, "Desc:"), task.Description)
 			}
 			if task.Notes != "" {
-				fmt.Printf("Notes:       %s\n", task.Notes)
+				fmt.Printf("%s   %s\n", colorize(dim, "Notes:"), task.Notes)
 			}
 			if len(task.Labels) > 0 {
-				fmt.Printf("Labels:      %s\n", strings.Join(task.Labels, ", "))
+				fmt.Printf("%s  %s\n", colorize(dim, "Labels:"), strings.Join(task.Labels, ", "))
 			}
-			fmt.Printf("Created:     %s\n", task.CreatedAt.Format("2006-01-02 15:04"))
-			fmt.Printf("Updated:     %s\n", task.UpdatedAt.Format("2006-01-02 15:04"))
+			fmt.Printf("%s %s\n", colorize(dim, "Created:"), task.CreatedAt.Format("2006-01-02 15:04"))
+			fmt.Printf("%s %s\n", colorize(dim, "Updated:"), task.UpdatedAt.Format("2006-01-02 15:04"))
 			if task.ClosedAt != nil {
-				fmt.Printf("Closed:      %s\n", task.ClosedAt.Format("2006-01-02 15:04"))
+				fmt.Printf("%s  %s\n", colorize(dim, "Closed:"), task.ClosedAt.Format("2006-01-02 15:04"))
 			}
 			if task.CloseReason != "" {
-				fmt.Printf("Reason:      %s\n", task.CloseReason)
+				fmt.Printf("%s  %s\n", colorize(dim, "Reason:"), task.CloseReason)
 			}
 
 			// Show comments.
 			comments, _ := store.ListComments(task.ID)
 			if len(comments) > 0 {
-				fmt.Printf("\nComments (%d):\n", len(comments))
+				fmt.Printf("\n%s (%d):\n", colorize(dim, "Comments"), len(comments))
 				for _, c := range comments {
 					author := c.Author
 					if author == "" {
 						author = "anonymous"
 					}
-					fmt.Printf("  [%s] %s: %s\n", c.CreatedAt.Format("01-02 15:04"), author, c.Content)
+					fmt.Printf("  %s %s: %s\n", colorize(dim, "["+c.CreatedAt.Format("01-02 15:04")+"]"), colorize(cyan, author), c.Content)
 				}
 			}
 
 			// Show dependencies.
 			deps, _ := store.ListDependencies(task.ID)
 			if len(deps) > 0 {
-				fmt.Printf("\nDepends on:\n")
+				fmt.Printf("\n%s\n", colorize(dim, "Depends on:"))
 				for _, d := range deps {
 					depTask, err := store.Get(d.ToID)
 					if err == nil {
-						fmt.Printf("  %s %s (%s)\n", d.ToID, depTask.Title, depTask.Status)
+						fmt.Printf("  %s %s %s\n", colorID(d.ToID), depTask.Title, colorStatus(depTask.Status))
 					}
 				}
 			}
 
 			dependents, _ := store.ListDependents(task.ID)
 			if len(dependents) > 0 {
-				fmt.Printf("\nBlocks:\n")
+				fmt.Printf("\n%s\n", colorize(dim, "Blocks:"))
 				for _, d := range dependents {
 					depTask, err := store.Get(d.FromID)
 					if err == nil {
-						fmt.Printf("  %s %s (%s)\n", d.FromID, depTask.Title, depTask.Status)
+						fmt.Printf("  %s %s %s\n", colorID(d.FromID), depTask.Title, colorStatus(depTask.Status))
 					}
 				}
 			}
 
-			// Show children.
-			children, _ := store.Children(task.ID)
-			if len(children) > 0 {
-				fmt.Printf("\nChildren (%d):\n", len(children))
-				for _, c := range children {
-					fmt.Printf("  ")
-					printTaskLine(c)
-				}
+			// Show subtask tree.
+			tree, _ := store.GetTree(task.ID)
+			if tree != nil && len(tree.Children) > 0 {
+				fmt.Printf("\n%s (%d):\n", colorize(dim, "Subtasks"), countDescendants(tree))
+				printSubtaskTree(tree.Children, "  ")
 			}
 
 			// Show custom attributes.
 			attrs, _ := store.Attrs(task.ID)
 			if len(attrs) > 0 {
-				fmt.Printf("\nAttributes:\n")
+				fmt.Printf("\n%s\n", colorize(dim, "Attributes:"))
 				for _, a := range attrs {
-					fmt.Printf("  %s = %s (%s)\n", a.Key, a.Value, a.Type)
+					fmt.Printf("  %s = %s %s\n", a.Key, a.Value, colorize(dim, "("+string(a.Type)+")"))
 				}
 			}
 
@@ -258,7 +250,7 @@ func updateCmd() *cobra.Command {
 
 			if claim {
 				if assignee == "" {
-					assignee = "cli"
+					assignee = actorName
 				}
 				if err := store.Claim(id, assignee); err != nil {
 					return err
@@ -268,7 +260,7 @@ func updateCmd() *cobra.Command {
 			}
 
 			if status != "" {
-				if err := store.UpdateStatus(id, gig.Status(status), "cli"); err != nil {
+				if err := store.UpdateStatus(id, gig.Status(status), actorName); err != nil {
 					return err
 				}
 				fmt.Printf("Status of %s set to %s\n", id, status)
@@ -297,7 +289,7 @@ func updateCmd() *cobra.Command {
 				params.Labels = &l
 			}
 
-			task, err := store.Update(id, params, "cli")
+			task, err := store.Update(id, params, actorName)
 			if err != nil {
 				return err
 			}
@@ -331,7 +323,7 @@ func closeCmd() *cobra.Command {
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			for _, id := range args {
-				if err := store.CloseTask(id, reason, "cli"); err != nil {
+				if err := store.CloseTask(id, reason, actorName); err != nil {
 					return err
 				}
 				if !quietOutput {
@@ -352,7 +344,7 @@ func reopenCmd() *cobra.Command {
 		Short: "Reopen a closed task",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := store.Reopen(args[0], "cli"); err != nil {
+			if err := store.Reopen(args[0], actorName); err != nil {
 				return err
 			}
 			fmt.Printf("Reopened %s\n", args[0])
@@ -377,13 +369,13 @@ func readyCmd() *cobra.Command {
 				fmt.Println("No ready tasks.")
 				return nil
 			}
-			for _, t := range tasks {
-				if quietOutput {
+			if quietOutput {
+				for _, t := range tasks {
 					fmt.Println(t.ID)
-					continue
 				}
-				printTaskLine(t)
+				return nil
 			}
+			printTaskTable(tasks)
 			return nil
 		},
 	}
@@ -405,13 +397,13 @@ func blockedCmd() *cobra.Command {
 				fmt.Println("No blocked tasks.")
 				return nil
 			}
-			for _, t := range tasks {
-				if quietOutput {
+			if quietOutput {
+				for _, t := range tasks {
 					fmt.Println(t.ID)
-					continue
 				}
-				printTaskLine(t)
+				return nil
 			}
+			printTaskTable(tasks)
 			return nil
 		},
 	}
@@ -434,26 +426,80 @@ func childrenCmd() *cobra.Command {
 				fmt.Println("No children.")
 				return nil
 			}
-			for _, t := range tasks {
-				if quietOutput {
+			if quietOutput {
+				for _, t := range tasks {
 					fmt.Println(t.ID)
-					continue
 				}
-				printTaskLine(t)
+				return nil
 			}
+			printTaskTable(tasks)
 			return nil
 		},
 	}
 }
 
-// printTaskLine prints a single-line summary of a task.
+func searchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search tasks by title and description",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tasks, err := store.Search(args[0])
+			if err != nil {
+				return err
+			}
+			if jsonOutput {
+				return printJSON(tasks)
+			}
+			if len(tasks) == 0 {
+				fmt.Println("No matching tasks.")
+				return nil
+			}
+			if quietOutput {
+				for _, t := range tasks {
+					fmt.Println(t.ID)
+				}
+				return nil
+			}
+			printTaskTable(tasks)
+			return nil
+		},
+	}
+}
+
+// printTaskLine prints a single-line summary of a task with colors.
 func printTaskLine(t *gig.Task) {
-	icon := statusIcon(t.Status)
 	assignee := ""
 	if t.Assignee != "" {
-		assignee = fmt.Sprintf(" @%s", t.Assignee)
+		assignee = " " + colorAssignee(t.Assignee)
 	}
-	fmt.Printf("%s [%s] P%d %s%s\n", t.ID, icon, t.Priority, t.Title, assignee)
+	fmt.Printf("%s %s %s %s%s\n", colorID(t.ID), colorStatus(t.Status), colorPriority(t.Priority), t.Title, assignee)
+}
+
+// printTaskTable prints tasks in aligned columns with colors.
+func printTaskTable(tasks []*gig.Task) {
+	if len(tasks) == 0 {
+		fmt.Println("No tasks found.")
+		return
+	}
+
+	// Calculate max ID width for alignment.
+	maxID := 0
+	for _, t := range tasks {
+		if len(t.ID) > maxID {
+			maxID = len(t.ID)
+		}
+	}
+
+	for _, t := range tasks {
+		assignee := ""
+		if t.Assignee != "" {
+			assignee = " " + colorAssignee(t.Assignee)
+		}
+		// Pad ID to align columns. Use raw length for padding, color codes don't count.
+		padded := fmt.Sprintf("%-*s", maxID, t.ID)
+		fmt.Printf("%s %s %s %s%s\n", colorize(dim, padded), colorStatus(t.Status), colorPriority(t.Priority), t.Title, assignee)
+	}
 }
 
 func statusIcon(s gig.Status) string {
@@ -471,6 +517,52 @@ func statusIcon(s gig.Status) string {
 	default:
 		return "?"
 	}
+}
+
+func priorityLabel(p gig.Priority) string {
+	switch p {
+	case gig.P0:
+		return "(critical)"
+	case gig.P1:
+		return "(high)"
+	case gig.P2:
+		return "(medium)"
+	case gig.P3:
+		return "(low)"
+	case gig.P4:
+		return "(backlog)"
+	default:
+		return ""
+	}
+}
+
+// printSubtaskTree prints a recursive tree of subtasks with indentation.
+func printSubtaskTree(tasks []*gig.Task, indent string) {
+	for i, t := range tasks {
+		connector := "├── "
+		childIndent := indent + "│   "
+		if i == len(tasks)-1 {
+			connector = "└── "
+			childIndent = indent + "    "
+		}
+		assignee := ""
+		if t.Assignee != "" {
+			assignee = " " + colorAssignee(t.Assignee)
+		}
+		fmt.Printf("%s%s%s %s %s%s\n", indent, connector, colorStatus(t.Status), colorID(t.ID), t.Title, assignee)
+		if len(t.Children) > 0 {
+			printSubtaskTree(t.Children, childIndent)
+		}
+	}
+}
+
+// countDescendants counts all descendants in a task tree.
+func countDescendants(t *gig.Task) int {
+	count := len(t.Children)
+	for _, c := range t.Children {
+		count += countDescendants(c)
+	}
+	return count
 }
 
 func printJSON(v any) error {
