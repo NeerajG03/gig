@@ -1,0 +1,76 @@
+package main
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/neerajg/gig"
+	"github.com/spf13/cobra"
+)
+
+var (
+	jsonOutput  bool
+	quietOutput bool
+	store       *gig.Store
+)
+
+func main() {
+	rootCmd := &cobra.Command{
+		Use:   "gig",
+		Short: "A lightweight task management system",
+		Long:  "gig — task management CLI & SDK. Tracks tasks, dependencies, and events with SQLite.",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Skip store init for 'init' command.
+			if cmd.Name() == "init" {
+				return nil
+			}
+			cfg, err := gig.LoadConfig("")
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			s, err := gig.Open(cfg.DBPath, gig.WithPrefix(cfg.Prefix), gig.WithHashLength(cfg.HashLen), gig.WithConfig(cfg))
+			if err != nil {
+				return fmt.Errorf("open store: %w", err)
+			}
+			store = s
+			return nil
+		},
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			if store != nil {
+				store.Close()
+			}
+		},
+	}
+
+	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	rootCmd.PersistentFlags().BoolVarP(&quietOutput, "quiet", "q", false, "Output IDs only")
+
+	rootCmd.AddCommand(
+		initCmd(),
+		createCmd(),
+		listCmd(),
+		showCmd(),
+		updateCmd(),
+		closeCmd(),
+		reopenCmd(),
+		commentCmd(),
+		commentsCmd(),
+		depCmd(),
+		readyCmd(),
+		blockedCmd(),
+		childrenCmd(),
+		exportCmd(),
+		importCmd(),
+		syncCmd(),
+		eventsCmd(),
+		statsCmd(),
+		configCmd(),
+		doctorCmd(),
+		uiCmd(),
+		attrCmd(),
+	)
+
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
