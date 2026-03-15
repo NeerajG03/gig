@@ -1,0 +1,92 @@
+{{define "create.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Task — gig</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-left">
+            <a href="/" class="logo">gig</a>
+            <span class="nav-breadcrumb">
+                <a href="/">Board</a> / New Task
+            </span>
+        </div>
+    </nav>
+
+    <div class="form-container">
+        <h2>Create Task</h2>
+        <form method="POST" action="/new" class="task-form">
+            <div class="form-group">
+                <label for="title">Title *</label>
+                <input type="text" id="title" name="title" class="input" required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" class="input textarea" rows="3"></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="type">Type</label>
+                    <select id="type" name="type" class="input">
+                        <option value="task">Task</option>
+                        <option value="bug">Bug</option>
+                        <option value="feature">Feature</option>
+                        <option value="epic">Epic</option>
+                        <option value="chore">Chore</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="priority">Priority</label>
+                    <select id="priority" name="priority" class="input">
+                        <option value="0">P0 — Critical</option>
+                        <option value="1">P1 — High</option>
+                        <option value="2" selected>P2 — Medium</option>
+                        <option value="3">P3 — Low</option>
+                        <option value="4">P4 — Backlog</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="assignee">Assignee</label>
+                    <input type="text" id="assignee" name="assignee" class="input" placeholder="e.g. neeraj">
+                </div>
+
+                <div class="form-group">
+                    <label for="parent">Parent Task</label>
+                    <select id="parent" name="parent" class="input">
+                        <option value="">None</option>
+                        {{range .AllTasks}}
+                        <option value="{{.ID}}">{{.ID}} — {{.Title}}</option>
+                        {{end}}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="labels">Labels</label>
+                <input type="text" id="labels" name="labels" class="input" placeholder="comma-separated: backend, urgent">
+            </div>
+
+            <div class="form-group">
+                <label for="notes">Notes</label>
+                <textarea id="notes" name="notes" class="input textarea" rows="2"></textarea>
+            </div>
+
+            <div class="form-actions">
+                <a href="/" class="btn btn-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary">Create Task</button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>
+{{end}}

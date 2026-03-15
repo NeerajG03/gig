@@ -1,0 +1,16 @@
+{{define "comments.html"}}
+<div class="comments-list" id="comments-list">
+    {{range .}}
+    <div class="comment">
+        <div class="comment-meta">
+            <strong>{{if .Author}}{{.Author}}{{else}}anonymous{{end}}</strong>
+            <span class="comment-time">{{.CreatedAt.Format "Jan 2, 15:04"}}</span>
+        </div>
+        <div class="comment-body">{{.Content}}</div>
+    </div>
+    {{end}}
+    {{if not .}}
+    <p class="muted">No comments yet.</p>
+    {{end}}
+</div>
+{{end}}
