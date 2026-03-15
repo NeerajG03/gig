@@ -37,8 +37,8 @@
 - [x] **Table formatting**: aligned columns for `gig list`, `gig ready`, `gig blocked`
 - [x] **`--actor` flag**: global flag to set actor name for events (default: "cli")
 - [x] **Subtask tree in show**: `gig show` displays recursive ASCII tree of all descendants
+- [x] **Shell completions**: bash/zsh/fish with dynamic task ID, status, type, priority, and attr key completion
 - [ ] **Homebrew tap**: `brew install neerajg/tap/gig`
-- [ ] **Shell completions**: bash/zsh/fish via cobra's built-in generator
 - [ ] **Config validation**: `gig doctor` warns on invalid config values
 - [ ] **More test coverage**: config, hooks, edge cases
 

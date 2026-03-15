@@ -58,6 +58,10 @@ func createCmd() *cobra.Command {
 	cmd.Flags().StringVar(&notes, "notes", "", "Notes")
 	cmd.Flags().StringVar(&labels, "labels", "", "Comma-separated labels")
 
+	_ = cmd.RegisterFlagCompletionFunc("type", taskTypeCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("priority", priorityCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("parent", taskIDCompletion)
+
 	return cmd
 }
 
@@ -132,14 +136,20 @@ func listCmd() *cobra.Command {
 	cmd.Flags().IntVar(&limit, "limit", 0, "Limit results")
 	cmd.Flags().StringArrayVar(&attrFilters, "attr", nil, "Filter by attribute (key=value, repeatable)")
 
+	_ = cmd.RegisterFlagCompletionFunc("status", statusCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("type", taskTypeCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("priority", priorityCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("parent", taskIDCompletion)
+
 	return cmd
 }
 
 func showCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "show <id>",
-		Short: "Show task details",
-		Args:  cobra.ExactArgs(1),
+		Use:               "show <id>",
+		Short:             "Show task details",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			task, err := store.Get(args[0])
 			if err != nil {
@@ -242,9 +252,10 @@ func updateCmd() *cobra.Command {
 	var claim bool
 
 	cmd := &cobra.Command{
-		Use:   "update <id>",
-		Short: "Update a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "update <id>",
+		Short:             "Update a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: openTaskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
 
@@ -311,6 +322,9 @@ func updateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&labels, "labels", "", "New labels (comma-separated)")
 	cmd.Flags().BoolVar(&claim, "claim", false, "Claim task (set assignee + in_progress)")
 
+	_ = cmd.RegisterFlagCompletionFunc("status", statusCompletion)
+	_ = cmd.RegisterFlagCompletionFunc("priority", priorityCompletion)
+
 	return cmd
 }
 
@@ -318,9 +332,10 @@ func closeCmd() *cobra.Command {
 	var reason string
 
 	cmd := &cobra.Command{
-		Use:   "close <id> [id2...]",
-		Short: "Close one or more tasks",
-		Args:  cobra.MinimumNArgs(1),
+		Use:               "close <id> [id2...]",
+		Short:             "Close one or more tasks",
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: openTaskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			for _, id := range args {
 				if err := store.CloseTask(id, reason, actorName); err != nil {
@@ -340,9 +355,10 @@ func closeCmd() *cobra.Command {
 
 func reopenCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "reopen <id>",
-		Short: "Reopen a closed task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "reopen <id>",
+		Short:             "Reopen a closed task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: closedTaskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := store.Reopen(args[0], actorName); err != nil {
 				return err
@@ -411,9 +427,10 @@ func blockedCmd() *cobra.Command {
 
 func childrenCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "children <id>",
-		Short: "Show subtasks of a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "children <id>",
+		Short:             "Show subtasks of a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tasks, err := store.Children(args[0])
 			if err != nil {

@@ -21,8 +21,8 @@ func main() {
 		Short: "A lightweight task management system",
 		Long:  "gig — task management CLI & SDK. Tracks tasks, dependencies, and events with SQLite.",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			// Skip store init for 'init' command.
-			if cmd.Name() == "init" {
+			// Skip store init for commands that don't need it.
+			if cmd.Name() == "init" || cmd.Name() == "completion" {
 				return nil
 			}
 			cfg, err := gig.LoadConfig("")
@@ -71,6 +71,7 @@ func main() {
 		uiCmd(),
 		attrCmd(),
 		searchCmd(),
+		completionCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

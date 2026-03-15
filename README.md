@@ -100,7 +100,24 @@ gig events <id>
 gig stats
 gig config
 gig doctor
+gig search <query>
 gig ui [--port 9741]
+gig completion [bash|zsh|fish]
+```
+
+### Shell Completions
+
+Tab-complete commands, task IDs, flag values, and attribute keys:
+
+```bash
+# bash
+source <(gig completion bash)
+
+# zsh
+source <(gig completion zsh)
+
+# fish
+gig completion fish | source
 ```
 
 ## Storage

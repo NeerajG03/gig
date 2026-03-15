@@ -10,9 +10,10 @@ func commentCmd() *cobra.Command {
 	var author string
 
 	cmd := &cobra.Command{
-		Use:   "comment <id> <message>",
-		Short: "Add a comment to a task",
-		Args:  cobra.ExactArgs(2),
+		Use:               "comment <id> <message>",
+		Short:             "Add a comment to a task",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			c, err := store.AddComment(args[0], author, args[1])
 			if err != nil {
@@ -32,9 +33,10 @@ func commentCmd() *cobra.Command {
 
 func commentsCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "comments <id>",
-		Short: "List comments on a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "comments <id>",
+		Short:             "List comments on a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			comments, err := store.ListComments(args[0])
 			if err != nil {

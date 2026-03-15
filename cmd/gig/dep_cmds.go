@@ -19,9 +19,10 @@ func depCmd() *cobra.Command {
 
 func depAddCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "add <task> <depends-on>",
-		Short: "Add dependency (task depends on depends-on)",
-		Args:  cobra.ExactArgs(2),
+		Use:               "add <task> <depends-on>",
+		Short:             "Add dependency (task depends on depends-on)",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := store.AddDependency(args[0], args[1], gig.Blocks); err != nil {
 				return err
@@ -34,9 +35,10 @@ func depAddCmd() *cobra.Command {
 
 func depRemoveCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "remove <task> <depends-on>",
-		Short: "Remove a dependency",
-		Args:  cobra.ExactArgs(2),
+		Use:               "remove <task> <depends-on>",
+		Short:             "Remove a dependency",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := store.RemoveDependency(args[0], args[1]); err != nil {
 				return err
@@ -49,9 +51,10 @@ func depRemoveCmd() *cobra.Command {
 
 func depListCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "list <id>",
-		Short: "Show dependencies for a task",
-		Args:  cobra.ExactArgs(1),
+		Use:               "list <id>",
+		Short:             "Show dependencies for a task",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			deps, err := store.ListDependencies(args[0])
 			if err != nil {
@@ -80,9 +83,10 @@ func depListCmd() *cobra.Command {
 
 func depTreeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "tree <id>",
-		Short: "Show dependency tree",
-		Args:  cobra.ExactArgs(1),
+		Use:               "tree <id>",
+		Short:             "Show dependency tree",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			tree, err := store.DepTree(args[0])
 			if err != nil {
