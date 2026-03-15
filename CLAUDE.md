@@ -11,6 +11,7 @@ gig/
 ├── store.go            # Store: Open/Close, ID generation, event emitter, WAL+FK pragmas
 ├── task.go             # Task mutations: Create, Get, Update, Close, Reopen, Claim
 ├── query.go            # Task queries: List, Search, Ready, Blocked, Children, GetTree
+├── doctor.go           # Doctor(): health checks (integrity, orphans, cycles, config)
 ├── attribute.go        # Custom attributes: DefineAttr, SetAttr, GetAttr, Attrs, DeleteAttr
 ├── comment.go          # AddComment, ListComments
 ├── dependency.go       # AddDependency, RemoveDependency, ListDeps, DepTree, DetectCycles
@@ -141,13 +142,16 @@ go test -count=1 ./...  # Disable test caching
 
 | File | What it tests |
 |------|--------------|
-| `store_test.go` | `tempDB()` helper |
+| `store_test.go` | `tempDB()` helper, Open/Close, directory creation, migration idempotency |
 | `task_test.go` | CRUD, list filters, search, tree, subtask ID ladder, ExcludeStatuses, root task filter, ready/blocked |
 | `comment_test.go` | Add/list comments, time parsing regression, validation |
 | `dependency_test.go` | Add/remove deps, cycle detection, dep tree |
 | `attribute_test.go` | Define/set/get/list/delete attrs, type validation |
 | `export_test.go` | JSONL export/import round-trip |
-| `config_test.go` | Config defaults, view settings validation, hash length bounds |
+| `config_test.go` | Config defaults, view settings, hash length bounds, invalid YAML, hooks parsing, save/reload |
+| `hook_test.go` | Filter matching, variable expansion, RunHooks dispatch, EnableHooks |
+| `event_test.go` | Event recording, status change events, EventsSince, listeners (On/Off), multiple listeners |
+| `doctor_test.go` | Healthy DB, no config, valid/invalid config warnings, integrity check, HasIssues |
 
 ## Code Quality
 

@@ -42,8 +42,8 @@
 - [x] **Config-driven defaults**: `default_view` (list/tree) and `show_all` in `gig.yaml`, CLI flags override
 - [x] **ExcludeStatuses filter**: SDK-level status exclusion in `ListParams`
 - [ ] **Homebrew tap**: `brew install neerajg/tap/gig`
-- [ ] **Config validation**: `gig doctor` warns on invalid config values
-- [ ] **More test coverage**: hooks, edge cases
+- [x] **Config validation**: `gig doctor` warns on invalid config values
+- [x] **More test coverage**: hooks, config, events, doctor, E2E edge cases
 
 ### v0.3.0 — Sync Repo Integration
 
@@ -68,4 +68,4 @@
 - Jira/Linear import (one-time migration)
 - `gig archive` — move old closed tasks to separate DB
 - Metrics/burndown from events table
-- MCP server for gig (expose task management to AI agents via tool use)
+- ~~MCP server for gig~~ (descoped — no harness integration planned)

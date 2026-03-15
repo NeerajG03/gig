@@ -138,8 +138,17 @@ func statsCmd() *cobra.Command {
 func doctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Health check",
+		Short: "Run health checks on gig database and config",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			report, err := store.Doctor()
+			if err != nil {
+				return fmt.Errorf("doctor: %w", err)
+			}
+
+			if jsonOutput {
+				return printJSON(report)
+			}
+
 			fmt.Println("Checking gig health...")
 
 			configPath := gig.DefaultConfigPath()
@@ -149,24 +158,28 @@ func doctorCmd() *cobra.Command {
 				fmt.Printf("  [ok] Config: %s\n", configPath)
 			}
 
-			cfg, _ := gig.LoadConfig("")
 			if _, err := os.Stat(cfg.DBPath); err != nil {
 				fmt.Printf("  [!] Database not found: %s\n", cfg.DBPath)
 			} else {
 				fmt.Printf("  [ok] Database: %s\n", cfg.DBPath)
 			}
 
-			cycles, err := store.DetectCycles()
-			if err != nil {
-				fmt.Printf("  [!] Cycle detection failed: %v\n", err)
-			} else if len(cycles) > 0 {
-				fmt.Printf("  [!] %d dependency cycle(s) found\n", len(cycles))
-			} else {
-				fmt.Println("  [ok] No dependency cycles")
+			for _, d := range report.Diagnostics {
+				switch d.Level {
+				case gig.DiagOK:
+					fmt.Printf("  [ok] %s\n", d.Message)
+				case gig.DiagWarn:
+					fmt.Printf("  [!]  %s\n", d.Message)
+				case gig.DiagFail:
+					fmt.Printf("  [!!] %s\n", d.Message)
+				}
 			}
 
-			all, _ := store.List(gig.ListParams{})
-			fmt.Printf("  [ok] %d tasks in database\n", len(all))
+			if report.HasIssues() {
+				fmt.Println("\nSome issues found. Review warnings above.")
+			} else {
+				fmt.Println("\nAll checks passed.")
+			}
 
 			return nil
 		},
