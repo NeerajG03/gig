@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run Tests
+        run: |
+          go test ./... -count=1
+          go test -tags=e2e -count=1 ./cmd/gig/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release create "$TAG" \
+            --title "$TAG" \
+            --generate-notes
+
+      - name: Update Homebrew Tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+
+          # Get tarball SHA256
+          SHA=$(curl -sL "https://github.com/NeerajG03/gig/archive/refs/tags/${TAG}.tar.gz" | sha256sum | awk '{print $1}')
+
+          # Clone the tap repo
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/NeerajG03/homebrew-tap.git" tap
+
+          # Update the formula
+          cat > tap/Formula/gig.rb << EOF
+          class Gig < Formula
+            desc "Lightweight task management CLI backed by SQLite"
+            homepage "https://github.com/NeerajG03/gig"
+            url "https://github.com/NeerajG03/gig/archive/refs/tags/${TAG}.tar.gz"
+            sha256 "${SHA}"
+            license "MIT"
+
+            depends_on "go" => :build
+
+            def install
+              ldflags = "-s -w -X main.version=#{version}"
+              system "go", "build", *std_go_args(ldflags:), "./cmd/gig/"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/gig --version")
+              assert_match "Initialized", shell_output("#{bin}/gig init --prefix test 2>&1", 0)
+            end
+          end
+          EOF
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' tap/Formula/gig.rb
+
+          # Commit and push
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/gig.rb
+          git commit -m "Update gig to ${VERSION}"
+          git push
