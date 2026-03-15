@@ -11,6 +11,7 @@ import (
 var (
 	jsonOutput  bool
 	quietOutput bool
+	actorName   string
 	store       *gig.Store
 )
 
@@ -44,6 +45,7 @@ func main() {
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	rootCmd.PersistentFlags().BoolVarP(&quietOutput, "quiet", "q", false, "Output IDs only")
+	rootCmd.PersistentFlags().StringVar(&actorName, "actor", "cli", "Actor name for event attribution")
 
 	rootCmd.AddCommand(
 		initCmd(),
@@ -68,6 +70,7 @@ func main() {
 		doctorCmd(),
 		uiCmd(),
 		attrCmd(),
+		searchCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
