@@ -5,7 +5,7 @@
 **Platforms:** macOS, Linux, Windows
 
 [![License](https://img.shields.io/github/license/NeerajG03/gig)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/neerajg/gig)](https://goreportcard.com/report/github.com/neerajg/gig)
+[![Go Report Card](https://goreportcard.com/badge/github.com/NeerajG03/gig)](https://goreportcard.com/report/github.com/NeerajG03/gig)
 [![Test](https://github.com/NeerajG03/gig/actions/workflows/test.yml/badge.svg)](https://github.com/NeerajG03/gig/actions/workflows/test.yml)
 
 gig gives you task tracking with dependencies, hierarchy, events, and a built-in web UI — all in a single binary with zero runtime dependencies. Use it as a standalone CLI or import it as a Go SDK into your own applications.
