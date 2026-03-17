@@ -404,3 +404,47 @@ func TestReadyAndBlocked(t *testing.T) {
 		t.Error("no tasks should be blocked now")
 	}
 }
+
+func TestDeleteTask(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "To delete", CreatedBy: "test"})
+	store.AddComment(task.ID, "a note", "test")
+
+	err := store.DeleteTask(task.ID, "test")
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	_, err = store.Get(task.ID)
+	if err == nil {
+		t.Error("expected error getting deleted task")
+	}
+}
+
+func TestDeleteTaskWithChildren(t *testing.T) {
+	store, _ := tempDB(t)
+	parent, _ := store.Create(CreateParams{Title: "Parent", CreatedBy: "test"})
+	child, _ := store.Create(CreateParams{Title: "Child", ParentID: parent.ID, CreatedBy: "test"})
+
+	err := store.DeleteTask(parent.ID, "test")
+	if err != nil {
+		t.Fatalf("delete parent: %v", err)
+	}
+
+	_, err = store.Get(parent.ID)
+	if err == nil {
+		t.Error("parent should be deleted")
+	}
+	_, err = store.Get(child.ID)
+	if err == nil {
+		t.Error("child should be deleted with parent")
+	}
+}
+
+func TestDeleteNonexistent(t *testing.T) {
+	store, _ := tempDB(t)
+	err := store.DeleteTask("nonexistent", "test")
+	if err == nil {
+		t.Error("expected error deleting nonexistent task")
+	}
+}

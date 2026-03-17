@@ -110,6 +110,7 @@ const (
 	EventClosed            EventType = "closed"
 	EventDependencyAdded   EventType = "dependency_added"
 	EventDependencyRemoved EventType = "dependency_removed"
+	EventDeleted           EventType = "deleted"
 )
 
 // Task is the primary entity in gig.

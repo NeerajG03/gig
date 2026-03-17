@@ -245,6 +245,49 @@ func (s *Store) Reopen(id string, actor string) error {
 	return nil
 }
 
+// DeleteTask permanently removes a task and its children from the database.
+// Comments, dependencies, and custom attributes are removed via CASCADE.
+// Events are preserved as an audit trail.
+func (s *Store) DeleteTask(id string, actor string) error {
+	task, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+
+	// Recursively delete children first (depth-first).
+	children, err := s.Children(id)
+	if err != nil {
+		return fmt.Errorf("delete task: list children: %w", err)
+	}
+	for _, child := range children {
+		if err := s.DeleteTask(child.ID, actor); err != nil {
+			return fmt.Errorf("delete child %s: %w", child.ID, err)
+		}
+	}
+
+	// Delete events first (no CASCADE on events FK).
+	_, err = s.db.Exec("DELETE FROM events WHERE task_id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete task events: %w", err)
+	}
+
+	_, err = s.db.Exec("DELETE FROM tasks WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("delete task: %w", err)
+	}
+
+	// Emit to listeners only — can't insert event since task row is gone (FK).
+	s.emit(Event{
+		TaskID:    id,
+		Type:      EventDeleted,
+		Actor:     actor,
+		Field:     "title",
+		OldValue:  task.Title,
+		Timestamp: timeNowUTC(),
+	})
+	return nil
+}
+
 // Claim atomically sets assignee and status to in_progress.
 func (s *Store) Claim(id string, assignee string) error {
 	task, err := s.Get(id)

@@ -271,6 +271,26 @@ func closeCmd() *cobra.Command {
 	return cmd
 }
 
+func deleteCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:               "delete <id> [id2...]",
+		Short:             "Permanently delete one or more tasks (and their children)",
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: taskIDCompletion,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, id := range args {
+				if err := store.DeleteTask(id, actorName); err != nil {
+					return err
+				}
+				if !quietOutput {
+					fmt.Printf("Deleted %s\n", id)
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func reopenCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "reopen <id>",
