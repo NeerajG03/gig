@@ -482,6 +482,77 @@ func TestCLI_DepCycle(t *testing.T) {
 	assertContains(t, out, "cycle")
 }
 
+// Regression tests for gig-33da: --status filter in tree view should match
+// subtasks, not just root tasks.
+
+func TestCLI_TreeStatusFilterMatchesSubtask(t *testing.T) {
+	bin, home := setupGig(t)
+
+	// Parent is open, subtask is in_progress.
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Open parent", "--quiet"))
+	childID := strings.TrimSpace(run(t, bin, home, "create", "WIP subtask", "--parent", parentID, "--quiet"))
+	run(t, bin, home, "update", childID, "--status", "in_progress")
+
+	// --status in_progress should surface the subtask (and its parent for context).
+	out := run(t, bin, home, "list", "--tree", "--status", "in_progress")
+	assertContains(t, out, "Open parent")
+	assertContains(t, out, "WIP subtask")
+}
+
+func TestCLI_TreeStatusFilterExcludesNonMatching(t *testing.T) {
+	bin, home := setupGig(t)
+
+	// Two root tasks, both open. One has an in_progress subtask.
+	parentA := strings.TrimSpace(run(t, bin, home, "create", "Parent A", "--quiet"))
+	childA := strings.TrimSpace(run(t, bin, home, "create", "Child A WIP", "--parent", parentA, "--quiet"))
+	run(t, bin, home, "update", childA, "--status", "in_progress")
+
+	run(t, bin, home, "create", "Parent B standalone")
+
+	// Only the tree containing an in_progress node should appear.
+	out := run(t, bin, home, "list", "--tree", "--status", "in_progress")
+	assertContains(t, out, "Parent A")
+	assertContains(t, out, "Child A WIP")
+	assertNotContains(t, out, "Parent B standalone")
+}
+
+func TestCLI_TreeStatusFilterDeepDescendant(t *testing.T) {
+	bin, home := setupGig(t)
+
+	// 3-level tree: epic -> mid -> leaf (in_progress).
+	epicID := strings.TrimSpace(run(t, bin, home, "create", "Epic", "--type", "epic", "--quiet"))
+	midID := strings.TrimSpace(run(t, bin, home, "create", "Mid task", "--parent", epicID, "--quiet"))
+	leafID := strings.TrimSpace(run(t, bin, home, "create", "Deep leaf", "--parent", midID, "--quiet"))
+	run(t, bin, home, "update", leafID, "--status", "in_progress")
+
+	out := run(t, bin, home, "list", "--tree", "--status", "in_progress")
+	assertContains(t, out, "Epic")
+	assertContains(t, out, "Mid task")
+	assertContains(t, out, "Deep leaf")
+}
+
+func TestCLI_TreeStatusFilterJSON(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "JSON parent", "--quiet"))
+	childID := strings.TrimSpace(run(t, bin, home, "create", "JSON child WIP", "--parent", parentID, "--quiet"))
+	run(t, bin, home, "update", childID, "--status", "in_progress")
+
+	out := run(t, bin, home, "list", "--tree", "--status", "in_progress", "--json")
+	var trees []map[string]any
+	if err := json.Unmarshal([]byte(out), &trees); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if len(trees) == 0 {
+		t.Fatal("expected at least 1 tree in JSON output")
+	}
+	// The root should have children containing the matching subtask.
+	children, ok := trees[0]["children"].([]any)
+	if !ok || len(children) == 0 {
+		t.Error("expected root task to have children in JSON tree")
+	}
+}
+
 func TestCLI_ClaimTask(t *testing.T) {
 	bin, home := setupGig(t)
 

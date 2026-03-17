@@ -132,22 +132,42 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 	}
 	params.ExcludeStatuses = nil
 
+	// Save and clear the status filter — we need all roots so we can find
+	// matching subtasks deep in the tree. Inclusion filtering happens after
+	// building full trees.
+	var includeStatus *gig.Status
+	if params.Status != nil {
+		includeStatus = params.Status
+		params.Status = nil
+	}
+
 	tasks, err := store.List(params)
 	if err != nil {
 		return err
 	}
 
-	if jsonOutput {
+	buildTrees := func(tasks []*gig.Task) ([]*gig.Task, error) {
 		var trees []*gig.Task
 		for _, t := range tasks {
 			tree, err := store.GetTree(t.ID)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			trees = append(trees, tree)
 		}
+		if includeStatus != nil {
+			trees = filterTreeInclude(trees, *includeStatus)
+		}
 		if !includeAll {
 			trees = filterTree(trees, []gig.Status{gig.StatusClosed})
+		}
+		return trees, nil
+	}
+
+	if jsonOutput {
+		trees, err := buildTrees(tasks)
+		if err != nil {
+			return err
 		}
 		return printJSON(trees)
 	}
@@ -164,16 +184,9 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 		return nil
 	}
 
-	var trees []*gig.Task
-	for _, t := range tasks {
-		tree, err := store.GetTree(t.ID)
-		if err != nil {
-			return err
-		}
-		trees = append(trees, tree)
-	}
-	if !includeAll {
-		trees = filterTree(trees, []gig.Status{gig.StatusClosed})
+	trees, err := buildTrees(tasks)
+	if err != nil {
+		return err
 	}
 	for _, tree := range trees {
 		printTaskLine(tree)
@@ -182,6 +195,19 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 		}
 	}
 	return nil
+}
+
+// filterTreeInclude keeps only trees where at least one node matches the
+// given status. Ancestor nodes are preserved so the tree structure is intact.
+func filterTreeInclude(tasks []*gig.Task, status gig.Status) []*gig.Task {
+	var result []*gig.Task
+	for _, t := range tasks {
+		t.Children = filterTreeInclude(t.Children, status)
+		if t.Status == status || len(t.Children) > 0 {
+			result = append(result, t)
+		}
+	}
+	return result
 }
 
 // filterTree recursively removes tasks with excluded statuses from the tree.
