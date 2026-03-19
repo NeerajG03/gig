@@ -461,6 +461,53 @@ func TestReadyWithParentScope(t *testing.T) {
 	}
 }
 
+func TestAutoUnblockOnClose(t *testing.T) {
+	store, _ := tempDB(t)
+	blocker1, _ := store.Create(CreateParams{Title: "Blocker 1"})
+	blocker2, _ := store.Create(CreateParams{Title: "Blocker 2"})
+	blocked, _ := store.Create(CreateParams{Title: "Blocked task"})
+
+	store.AddDependency(blocked.ID, blocker1.ID, Blocks)
+	store.AddDependency(blocked.ID, blocker2.ID, Blocks)
+
+	// Manually set blocked task to blocked status.
+	store.UpdateStatus(blocked.ID, StatusBlocked, "test")
+
+	task, _ := store.Get(blocked.ID)
+	if task.Status != StatusBlocked {
+		t.Fatalf("expected blocked, got %s", task.Status)
+	}
+
+	// Close first blocker — should NOT unblock (blocker2 still open).
+	store.CloseTask(blocker1.ID, "done", "test")
+	task, _ = store.Get(blocked.ID)
+	if task.Status != StatusBlocked {
+		t.Errorf("should still be blocked (blocker2 open), got %s", task.Status)
+	}
+
+	// Close second blocker — should auto-unblock.
+	store.CloseTask(blocker2.ID, "done", "test")
+	task, _ = store.Get(blocked.ID)
+	if task.Status != StatusOpen {
+		t.Errorf("should be auto-unblocked to open, got %s", task.Status)
+	}
+}
+
+func TestAutoUnblockIgnoresNonBlocked(t *testing.T) {
+	store, _ := tempDB(t)
+	blocker, _ := store.Create(CreateParams{Title: "Blocker"})
+	dependent, _ := store.Create(CreateParams{Title: "Dependent"})
+
+	store.AddDependency(dependent.ID, blocker.ID, Blocks)
+	// dependent stays open (not manually set to blocked) — auto-unblock should skip it.
+
+	store.CloseTask(blocker.ID, "done", "test")
+	task, _ := store.Get(dependent.ID)
+	if task.Status != StatusOpen {
+		t.Errorf("open task should remain open, got %s", task.Status)
+	}
+}
+
 func TestDeleteTask(t *testing.T) {
 	store, _ := tempDB(t)
 	task, _ := store.Create(CreateParams{Title: "To delete", CreatedBy: "test"})

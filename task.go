@@ -209,6 +209,60 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 	}
 
 	s.recordEvent(id, EventClosed, actor, "status", string(task.Status), string(StatusClosed))
+
+	// Auto-unblock: transition dependents from blocked→open if all their blockers are now closed.
+	if err := s.autoUnblock(id, actor); err != nil {
+		return fmt.Errorf("auto-unblock after closing %s: %w", id, err)
+	}
+	return nil
+}
+
+// autoUnblock checks tasks that depend on the given task. If a dependent is
+// blocked and all its blockers are now closed, it transitions to open.
+func (s *Store) autoUnblock(closedID string, actor string) error {
+	dependents, err := s.ListDependents(closedID)
+	if err != nil {
+		return err
+	}
+
+	for _, dep := range dependents {
+		if dep.Type != Blocks {
+			continue
+		}
+		task, err := s.Get(dep.FromID)
+		if err != nil || task.Status != StatusBlocked {
+			continue
+		}
+
+		// Check if all blockers for this task are now closed.
+		blockers, err := s.ListDependencies(task.ID)
+		if err != nil {
+			continue
+		}
+		allResolved := true
+		for _, b := range blockers {
+			if b.Type != Blocks {
+				continue
+			}
+			blocker, err := s.Get(b.ToID)
+			if err != nil || blocker.Status != StatusClosed {
+				allResolved = false
+				break
+			}
+		}
+
+		if allResolved {
+			now := timeNowUTC()
+			_, err := s.db.Exec(
+				"UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+				string(StatusOpen), now.Format(timeFormat), task.ID,
+			)
+			if err != nil {
+				return fmt.Errorf("unblock %s: %w", task.ID, err)
+			}
+			s.recordEvent(task.ID, EventStatusChanged, actor, "status", string(StatusBlocked), string(StatusOpen))
+		}
+	}
 	return nil
 }
 
