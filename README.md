@@ -17,7 +17,7 @@ gig gives you task tracking with dependencies, hierarchy, events, and a built-in
 brew install neerajg03/tap/gig
 
 # Or via Go
-go install github.com/neerajg/gig/cmd/gig@latest
+go install github.com/NeerajG03/gig/cmd/gig@latest
 
 # Initialize
 gig init --prefix myapp
@@ -32,7 +32,7 @@ gig close myapp-a3f8 --reason "Fixed in commit abc123"
 
 ## Features
 
-- **SDK-first** — the CLI is a thin wrapper; import `github.com/neerajg/gig` in any Go app.
+- **SDK-first** — the CLI is a thin wrapper; import `github.com/NeerajG03/gig` in any Go app.
 - **Pure Go SQLite** — single binary, no CGO, no runtime dependencies. Uses [modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite).
 - **Task hierarchy** — parent/child tasks with ladder IDs (`gig-a3f8.1`, `.1.1`). Full tree view via `gig list --tree`.
 - **Dependency DAG** — `gig dep add/remove/tree/cycles` with automatic cycle detection.
@@ -78,7 +78,7 @@ gig create "Write tests" --parent myapp-a3f8
 ## SDK Usage
 
 ```go
-import "github.com/neerajg/gig"
+import "github.com/NeerajG03/gig"
 
 store, _ := gig.Open("tasks.db", gig.WithPrefix("myapp"))
 defer store.Close()
@@ -132,7 +132,7 @@ gig completion fish | source      # fish
 brew install neerajg03/tap/gig
 
 # Or Go install
-go install github.com/neerajg/gig/cmd/gig@latest
+go install github.com/NeerajG03/gig/cmd/gig@latest
 
 # Or build from source
 git clone https://github.com/NeerajG03/gig.git
