@@ -29,6 +29,9 @@ func main() {
 			if cmd.Name() == "init" || cmd.Name() == "completion" {
 				return nil
 			}
+			if cmd.HasParent() && cmd.Parent().Name() == "install" {
+				return nil
+			}
 			var err error
 			cfg, err = gig.LoadConfig("")
 			if err != nil {
@@ -78,6 +81,7 @@ func main() {
 		attrCmd(),
 		searchCmd(),
 		completionCmd(),
+		installCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
