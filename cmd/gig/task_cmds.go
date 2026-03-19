@@ -123,6 +123,24 @@ func showCmd() *cobra.Command {
 				}
 			}
 
+			cp, _ := store.LatestCheckpoint(task.ID)
+			if cp != nil {
+				fmt.Printf("\n%s %s\n", colorize(dim, "Latest checkpoint:"), colorize(dim, "["+cp.CreatedAt.Format("2006-01-02 15:04")+"]"))
+				fmt.Printf("  %s %s\n", colorize(dim, "Done:"), cp.Done)
+				if cp.Decisions != "" {
+					fmt.Printf("  %s %s\n", colorize(dim, "Decisions:"), cp.Decisions)
+				}
+				if cp.Next != "" {
+					fmt.Printf("  %s %s\n", colorize(dim, "Next:"), cp.Next)
+				}
+				if cp.Blockers != "" {
+					fmt.Printf("  %s %s\n", colorize(dim, "Blockers:"), cp.Blockers)
+				}
+				if len(cp.Files) > 0 {
+					fmt.Printf("  %s %s\n", colorize(dim, "Files:"), strings.Join(cp.Files, ", "))
+				}
+			}
+
 			deps, _ := store.ListDependencies(task.ID)
 			if len(deps) > 0 {
 				fmt.Printf("\n%s\n", colorize(dim, "Depends on:"))
