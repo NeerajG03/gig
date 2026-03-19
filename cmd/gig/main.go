@@ -80,6 +80,8 @@ func main() {
 		uiCmd(),
 		attrCmd(),
 		searchCmd(),
+		checkpointCmd(),
+		checkpointsCmd(),
 		completionCmd(),
 		installCmd(),
 	)

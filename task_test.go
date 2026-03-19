@@ -429,6 +429,30 @@ func TestReadyExcludesInProgress(t *testing.T) {
 	}
 }
 
+func TestReadyExcludesBlocked(t *testing.T) {
+	store, _ := tempDB(t)
+	open, _ := store.Create(CreateParams{Title: "Open task"})
+	blockedTask, _ := store.Create(CreateParams{Title: "Blocked task"})
+
+	// Explicitly set to blocked status.
+	store.UpdateStatus(blockedTask.ID, StatusBlocked, "test")
+
+	ready, err := store.Ready("")
+	if err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	readyIDs := map[string]bool{}
+	for _, r := range ready {
+		readyIDs[r.ID] = true
+	}
+	if !readyIDs[open.ID] {
+		t.Error("open task should be ready")
+	}
+	if readyIDs[blockedTask.ID] {
+		t.Error("blocked task should NOT appear in ready")
+	}
+}
+
 func TestReadyWithParentScope(t *testing.T) {
 	store, _ := tempDB(t)
 	epic, _ := store.Create(CreateParams{Title: "Epic"})

@@ -147,6 +147,28 @@ type Comment struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// Checkpoint is a structured progress snapshot attached to a task.
+type Checkpoint struct {
+	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
+	Author    string    `json:"author,omitempty"`
+	Done      string    `json:"done"`
+	Decisions string    `json:"decisions,omitempty"`
+	Next      string    `json:"next,omitempty"`
+	Blockers  string    `json:"blockers,omitempty"`
+	Files     []string  `json:"files,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// CheckpointParams holds the inputs for creating a checkpoint.
+type CheckpointParams struct {
+	Done      string   // What was accomplished
+	Decisions string   // Key decisions and reasoning
+	Next      string   // What should happen next
+	Blockers  string   // Current blockers, if any
+	Files     []string // File paths touched or referenced
+}
+
 // Dependency represents a directional relationship between tasks.
 type Dependency struct {
 	FromID    string    `json:"from_id"`

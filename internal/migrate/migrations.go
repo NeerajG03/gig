@@ -106,6 +106,32 @@ CREATE INDEX IF NOT EXISTS idx_attrs_task ON custom_attributes(task_id);
 CREATE INDEX IF NOT EXISTS idx_attrs_key_value ON custom_attributes(key, value);
 `,
 	},
+	{
+		Version: 3,
+		SQL: `
+CREATE TABLE IF NOT EXISTS checkpoints (
+    id          TEXT PRIMARY KEY,
+    task_id     TEXT NOT NULL,
+    author      TEXT DEFAULT '',
+    done        TEXT NOT NULL,
+    decisions   TEXT DEFAULT '',
+    next        TEXT DEFAULT '',
+    blockers    TEXT DEFAULT '',
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoints_task ON checkpoints(task_id);
+
+CREATE TABLE IF NOT EXISTS checkpoint_files (
+    checkpoint_id  TEXT NOT NULL,
+    file_path      TEXT NOT NULL,
+    FOREIGN KEY (checkpoint_id) REFERENCES checkpoints(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_checkpoint_files ON checkpoint_files(checkpoint_id);
+`,
+	},
 }
 
 // Run applies all pending migrations to the database.
