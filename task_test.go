@@ -360,7 +360,7 @@ func TestReadyAndBlocked(t *testing.T) {
 
 	store.AddDependency(blocked.ID, blocker.ID, Blocks)
 
-	ready, err := store.Ready()
+	ready, err := store.Ready("")
 	if err != nil {
 		t.Fatalf("ready: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestReadyAndBlocked(t *testing.T) {
 	// Close the blocker — now the blocked task should become ready.
 	store.CloseTask(blocker.ID, "done", "test")
 
-	ready, _ = store.Ready()
+	ready, _ = store.Ready("")
 	readyIDs = map[string]bool{}
 	for _, r := range ready {
 		readyIDs[r.ID] = true
@@ -402,6 +402,62 @@ func TestReadyAndBlocked(t *testing.T) {
 	blockedTasks, _ = store.Blocked()
 	if len(blockedTasks) != 0 {
 		t.Error("no tasks should be blocked now")
+	}
+}
+
+func TestReadyExcludesInProgress(t *testing.T) {
+	store, _ := tempDB(t)
+	open, _ := store.Create(CreateParams{Title: "Open task"})
+	claimed, _ := store.Create(CreateParams{Title: "Claimed task"})
+
+	// Claim one task — it becomes in_progress.
+	store.Claim(claimed.ID, "agent")
+
+	ready, err := store.Ready("")
+	if err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	readyIDs := map[string]bool{}
+	for _, r := range ready {
+		readyIDs[r.ID] = true
+	}
+	if !readyIDs[open.ID] {
+		t.Error("open task should be ready")
+	}
+	if readyIDs[claimed.ID] {
+		t.Error("in_progress task should NOT be ready — it's already claimed")
+	}
+}
+
+func TestReadyWithParentScope(t *testing.T) {
+	store, _ := tempDB(t)
+	epic, _ := store.Create(CreateParams{Title: "Epic"})
+	sub1, _ := store.Create(CreateParams{Title: "Sub 1", ParentID: epic.ID})
+	sub2, _ := store.Create(CreateParams{Title: "Sub 2", ParentID: epic.ID})
+	other, _ := store.Create(CreateParams{Title: "Unrelated"})
+
+	// Block sub2 on sub1.
+	store.AddDependency(sub2.ID, sub1.ID, Blocks)
+
+	ready, err := store.Ready(epic.ID)
+	if err != nil {
+		t.Fatalf("ready: %v", err)
+	}
+	readyIDs := map[string]bool{}
+	for _, r := range ready {
+		readyIDs[r.ID] = true
+	}
+	if !readyIDs[sub1.ID] {
+		t.Error("sub1 should be ready within epic scope")
+	}
+	if readyIDs[sub2.ID] {
+		t.Error("sub2 should be blocked within epic scope")
+	}
+	if readyIDs[other.ID] {
+		t.Error("unrelated task should not appear in scoped ready")
+	}
+	if readyIDs[epic.ID] {
+		t.Error("parent task itself should not appear in scoped ready")
 	}
 }
 

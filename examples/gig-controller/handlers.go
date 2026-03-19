@@ -70,7 +70,7 @@ func handleBoard(w http.ResponseWriter, r *http.Request) {
 		total += len(tasks)
 	}
 
-	ready, _ := store.Ready()
+	ready, _ := store.Ready("")
 
 	data := BoardData{
 		Columns:    columns,

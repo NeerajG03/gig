@@ -230,7 +230,7 @@ func (s *Server) handleBoard(w http.ResponseWriter, r *http.Request) {
 		total += len(tasks)
 	}
 
-	ready, _ := s.store.Ready()
+	ready, _ := s.store.Ready("")
 
 	data := BoardData{
 		Columns:    columns,

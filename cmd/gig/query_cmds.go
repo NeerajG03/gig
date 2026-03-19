@@ -36,11 +36,13 @@ func searchCmd() *cobra.Command {
 }
 
 func readyCmd() *cobra.Command {
-	return &cobra.Command{
+	var parentID string
+
+	cmd := &cobra.Command{
 		Use:   "ready",
-		Short: "Show tasks with no blockers",
+		Short: "Show open tasks available to pick up (no blockers)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			tasks, err := store.Ready()
+			tasks, err := store.Ready(parentID)
 			if err != nil {
 				return err
 			}
@@ -61,6 +63,10 @@ func readyCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().StringVar(&parentID, "id", "", "Scope to children of this task")
+	cmd.RegisterFlagCompletionFunc("id", taskIDCompletion)
+	return cmd
 }
 
 func blockedCmd() *cobra.Command {

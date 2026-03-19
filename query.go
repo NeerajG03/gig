@@ -137,22 +137,33 @@ func (s *Store) GetTree(id string) (*Task, error) {
 }
 
 // Ready returns open/in_progress tasks that have no unresolved blockers.
-func (s *Store) Ready() ([]*Task, error) {
-	rows, err := s.db.Query(
-		`SELECT t.id, t.parent_id, t.title, t.description, t.status, t.priority,
+// Ready returns open tasks that have no unresolved blockers — i.e. tasks
+// available to be picked up. If parentID is non-empty, only returns children
+// (direct and nested) of that task.
+func (s *Store) Ready(parentID string) ([]*Task, error) {
+	query := `SELECT t.id, t.parent_id, t.title, t.description, t.status, t.priority,
 		  t.assignee, t.task_type, t.labels, t.notes, t.estimate, t.due_at,
 		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata
 		 FROM tasks t
-		 WHERE t.status IN ('open', 'in_progress')
+		 WHERE t.status = 'open'
 		   AND NOT EXISTS (
 		     SELECT 1 FROM dependencies d
 		     JOIN tasks blocker ON blocker.id = d.to_id
 		     WHERE d.from_id = t.id
 		       AND d.dep_type = 'blocks'
 		       AND blocker.status != 'closed'
-		   )
-		 ORDER BY t.priority ASC, t.updated_at DESC`,
-	)
+		   )`
+
+	var args []any
+	if parentID != "" {
+		// Match direct children and nested descendants (e.g. parent.1, parent.1.2).
+		query += ` AND (t.parent_id = ? OR t.id LIKE ?)`
+		args = append(args, parentID, parentID+".%")
+	}
+
+	query += ` ORDER BY t.priority ASC, t.updated_at DESC`
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("ready tasks: %w", err)
 	}

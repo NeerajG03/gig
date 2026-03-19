@@ -103,7 +103,7 @@ func statsCmd() *cobra.Command {
 		Short: "Show task statistics",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			all, _ := store.List(gig.ListParams{})
-			ready, _ := store.Ready()
+			ready, _ := store.Ready("")
 			blocked, _ := store.Blocked()
 
 			counts := map[gig.Status]int{}
