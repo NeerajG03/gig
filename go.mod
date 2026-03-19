@@ -1,4 +1,4 @@
-module github.com/neerajg/gig
+module github.com/NeerajG03/gig
 
 go 1.26.1
 

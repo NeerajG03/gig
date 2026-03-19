@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/neerajg/gig"
+	"github.com/NeerajG03/gig"
 )
 
 // seedDemoData populates the store with sample tasks if the DB is empty.

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/neerajg/gig/internal/migrate"
+	"github.com/NeerajG03/gig/internal/migrate"
 	_ "modernc.org/sqlite"
 )
 

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/neerajg/gig"
+	"github.com/NeerajG03/gig"
 )
 
 // ANSI color codes.

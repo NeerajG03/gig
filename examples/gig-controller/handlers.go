@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/neerajg/gig"
+	"github.com/NeerajG03/gig"
 )
 
 // Column represents a kanban column for template rendering.

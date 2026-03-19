@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/neerajg/gig"
+	"github.com/NeerajG03/gig"
 )
 
 //go:embed templates/*

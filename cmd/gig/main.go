@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/neerajg/gig"
+	"github.com/NeerajG03/gig"
 	"github.com/spf13/cobra"
 )
 
