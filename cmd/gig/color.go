@@ -56,6 +56,8 @@ func colorStatus(s gig.Status) string {
 		return colorize(yellow, "["+icon+"]")
 	case gig.StatusClosed:
 		return colorize(green, "["+icon+"]")
+	case gig.StatusCancelled:
+		return colorize(magenta, "["+icon+"]")
 	default:
 		return "[" + icon + "]"
 	}

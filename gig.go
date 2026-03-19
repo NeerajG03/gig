@@ -17,10 +17,16 @@ const (
 	StatusBlocked    Status = "blocked"
 	StatusDeferred   Status = "deferred"
 	StatusClosed     Status = "closed"
+	StatusCancelled  Status = "cancelled"
 )
 
 // ValidStatuses is the set of all valid status values.
-var ValidStatuses = []Status{StatusOpen, StatusInProgress, StatusBlocked, StatusDeferred, StatusClosed}
+var ValidStatuses = []Status{StatusOpen, StatusInProgress, StatusBlocked, StatusDeferred, StatusClosed, StatusCancelled}
+
+// IsTerminal returns true if the status represents a final state (closed or cancelled).
+func (s Status) IsTerminal() bool {
+	return s == StatusClosed || s == StatusCancelled
+}
 
 // IsValid returns true if s is a recognized status.
 func (s Status) IsValid() bool {

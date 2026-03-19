@@ -151,7 +151,7 @@ func (s *Store) Ready(parentID string) ([]*Task, error) {
 		     JOIN tasks blocker ON blocker.id = d.to_id
 		     WHERE d.from_id = t.id
 		       AND d.dep_type = 'blocks'
-		       AND blocker.status != 'closed'
+		       AND blocker.status NOT IN ('closed', 'cancelled')
 		   )`
 
 	var args []any
@@ -179,13 +179,13 @@ func (s *Store) Blocked() ([]*Task, error) {
 		  t.assignee, t.task_type, t.labels, t.notes, t.estimate, t.due_at,
 		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata
 		 FROM tasks t
-		 WHERE t.status != 'closed'
+		 WHERE t.status NOT IN ('closed', 'cancelled')
 		   AND EXISTS (
 		     SELECT 1 FROM dependencies d
 		     JOIN tasks blocker ON blocker.id = d.to_id
 		     WHERE d.from_id = t.id
 		       AND d.dep_type = 'blocks'
-		       AND blocker.status != 'closed'
+		       AND blocker.status NOT IN ('closed', 'cancelled')
 		   )
 		 ORDER BY t.priority ASC, t.updated_at DESC`,
 	)

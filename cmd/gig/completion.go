@@ -82,18 +82,17 @@ func openTaskIDCompletion(cmd *cobra.Command, args []string, toComplete string) 
 	return ids, cobra.ShellCompDirectiveNoFileComp
 }
 
-// closedTaskIDCompletion completes only closed task IDs.
+// closedTaskIDCompletion completes closed and cancelled task IDs (for reopen).
 func closedTaskIDCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if store == nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
-	status := gig.StatusClosed
-	tasks, err := store.List(gig.ListParams{Status: &status})
-	if err != nil {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
+	closed := gig.StatusClosed
+	cancelled := gig.StatusCancelled
+	closedTasks, _ := store.List(gig.ListParams{Status: &closed})
+	cancelledTasks, _ := store.List(gig.ListParams{Status: &cancelled})
 	var ids []string
-	for _, t := range tasks {
+	for _, t := range append(closedTasks, cancelledTasks...) {
 		ids = append(ids, t.ID+"\t"+t.Title)
 	}
 	return ids, cobra.ShellCompDirectiveNoFileComp
@@ -117,7 +116,7 @@ func attrKeyCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 
 // statusCompletion completes valid status values.
 func statusCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	return []string{"open", "in_progress", "blocked", "deferred", "closed"}, cobra.ShellCompDirectiveNoFileComp
+	return []string{"open", "in_progress", "blocked", "deferred", "closed", "cancelled"}, cobra.ShellCompDirectiveNoFileComp
 }
 
 // taskTypeCompletion completes valid task type values.

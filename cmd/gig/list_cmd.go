@@ -74,7 +74,7 @@ func listCmd() *cobra.Command {
 
 			// Exclude closed tasks by default (unless --all or explicit --status).
 			if !includeAll && !cmd.Flags().Changed("status") {
-				params.ExcludeStatuses = []gig.Status{gig.StatusClosed}
+				params.ExcludeStatuses = []gig.Status{gig.StatusClosed, gig.StatusCancelled}
 			}
 
 			if viewMode == "tree" {

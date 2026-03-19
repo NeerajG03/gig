@@ -208,6 +208,8 @@ func (s *Store) buildDepTree(sb *strings.Builder, task *Task, prefix string, isL
 		statusIcon = ">"
 	case StatusBlocked:
 		statusIcon = "!"
+	case StatusCancelled:
+		statusIcon = "-"
 	}
 
 	sb.WriteString(fmt.Sprintf("%s%s[%s] %s (%s)\n", prefix, connector, statusIcon, task.Title, task.ID))

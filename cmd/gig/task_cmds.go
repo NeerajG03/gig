@@ -271,6 +271,31 @@ func closeCmd() *cobra.Command {
 	return cmd
 }
 
+func cancelCmd() *cobra.Command {
+	var reason string
+
+	cmd := &cobra.Command{
+		Use:               "cancel <id> [id2...]",
+		Short:             "Cancel one or more tasks",
+		Args:              cobra.MinimumNArgs(1),
+		ValidArgsFunction: openTaskIDCompletion,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, id := range args {
+				if err := store.CancelTask(id, reason, actorName); err != nil {
+					return err
+				}
+				if !quietOutput {
+					fmt.Printf("Cancelled %s\n", id)
+				}
+			}
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&reason, "reason", "", "Cancellation reason")
+	return cmd
+}
+
 func deleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:               "delete <id> [id2...]",
@@ -350,6 +375,8 @@ func statusIcon(s gig.Status) string {
 		return "~"
 	case gig.StatusClosed:
 		return "x"
+	case gig.StatusCancelled:
+		return "-"
 	default:
 		return "?"
 	}

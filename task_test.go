@@ -532,6 +532,87 @@ func TestAutoUnblockIgnoresNonBlocked(t *testing.T) {
 	}
 }
 
+func TestCancelTask(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "To cancel"})
+
+	err := store.CancelTask(task.ID, "not needed", "test")
+	if err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	got, _ := store.Get(task.ID)
+	if got.Status != StatusCancelled {
+		t.Errorf("expected cancelled, got %s", got.Status)
+	}
+	if got.CloseReason != "not needed" {
+		t.Errorf("expected reason 'not needed', got %q", got.CloseReason)
+	}
+}
+
+func TestCancelTaskIsIdempotent(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "To cancel"})
+
+	store.CancelTask(task.ID, "reason", "test")
+	err := store.CancelTask(task.ID, "reason", "test")
+	if err != nil {
+		t.Errorf("second cancel should be no-op, got: %v", err)
+	}
+}
+
+func TestCancelUnblocksDependents(t *testing.T) {
+	store, _ := tempDB(t)
+	blocker, _ := store.Create(CreateParams{Title: "Blocker"})
+	dependent, _ := store.Create(CreateParams{Title: "Dependent"})
+
+	store.AddDependency(dependent.ID, blocker.ID, Blocks)
+	store.UpdateStatus(dependent.ID, StatusBlocked, "test")
+
+	// Cancelling the blocker should unblock the dependent.
+	store.CancelTask(blocker.ID, "no longer relevant", "test")
+
+	got, _ := store.Get(dependent.ID)
+	if got.Status != StatusOpen {
+		t.Errorf("dependent should be unblocked after cancel, got %s", got.Status)
+	}
+}
+
+func TestReopenCancelledTask(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "Cancelled task"})
+
+	store.CancelTask(task.ID, "reason", "test")
+	err := store.Reopen(task.ID, "test")
+	if err != nil {
+		t.Fatalf("reopen cancelled: %v", err)
+	}
+
+	got, _ := store.Get(task.ID)
+	if got.Status != StatusOpen {
+		t.Errorf("expected open after reopen, got %s", got.Status)
+	}
+}
+
+func TestIsTerminal(t *testing.T) {
+	tests := []struct {
+		status   Status
+		terminal bool
+	}{
+		{StatusOpen, false},
+		{StatusInProgress, false},
+		{StatusBlocked, false},
+		{StatusDeferred, false},
+		{StatusClosed, true},
+		{StatusCancelled, true},
+	}
+	for _, tt := range tests {
+		if got := tt.status.IsTerminal(); got != tt.terminal {
+			t.Errorf("IsTerminal(%s) = %v, want %v", tt.status, got, tt.terminal)
+		}
+	}
+}
+
 func TestDeleteTask(t *testing.T) {
 	store, _ := tempDB(t)
 	task, _ := store.Create(CreateParams{Title: "To delete", CreatedBy: "test"})

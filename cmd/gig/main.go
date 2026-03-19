@@ -62,6 +62,7 @@ func main() {
 		showCmd(),
 		updateCmd(),
 		closeCmd(),
+		cancelCmd(),
 		deleteCmd(),
 		reopenCmd(),
 		commentCmd(),

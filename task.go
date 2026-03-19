@@ -210,15 +210,41 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 
 	s.recordEvent(id, EventClosed, actor, "status", string(task.Status), string(StatusClosed))
 
-	// Auto-unblock: transition dependents from blocked→open if all their blockers are now closed.
 	if err := s.autoUnblock(id, actor); err != nil {
 		return fmt.Errorf("auto-unblock after closing %s: %w", id, err)
 	}
 	return nil
 }
 
+// CancelTask sets a task to cancelled with a reason. Also triggers auto-unblock.
+func (s *Store) CancelTask(id string, reason string, actor string) error {
+	task, err := s.Get(id)
+	if err != nil {
+		return err
+	}
+	if task.Status == StatusCancelled {
+		return nil
+	}
+
+	now := timeNowUTC()
+	_, err = s.db.Exec(
+		"UPDATE tasks SET status = ?, closed_at = ?, close_reason = ?, updated_at = ? WHERE id = ?",
+		string(StatusCancelled), now.Format(timeFormat), reason, now.Format(timeFormat), id,
+	)
+	if err != nil {
+		return fmt.Errorf("cancel task: %w", err)
+	}
+
+	s.recordEvent(id, EventStatusChanged, actor, "status", string(task.Status), string(StatusCancelled))
+
+	if err := s.autoUnblock(id, actor); err != nil {
+		return fmt.Errorf("auto-unblock after cancelling %s: %w", id, err)
+	}
+	return nil
+}
+
 // autoUnblock checks tasks that depend on the given task. If a dependent is
-// blocked and all its blockers are now closed, it transitions to open.
+// blocked and all its blockers are now terminal (closed/cancelled), it transitions to open.
 func (s *Store) autoUnblock(closedID string, actor string) error {
 	dependents, err := s.ListDependents(closedID)
 	if err != nil {
@@ -234,7 +260,7 @@ func (s *Store) autoUnblock(closedID string, actor string) error {
 			continue
 		}
 
-		// Check if all blockers for this task are now closed.
+		// Check if all blockers for this task are now terminal.
 		blockers, err := s.ListDependencies(task.ID)
 		if err != nil {
 			continue
@@ -245,7 +271,7 @@ func (s *Store) autoUnblock(closedID string, actor string) error {
 				continue
 			}
 			blocker, err := s.Get(b.ToID)
-			if err != nil || blocker.Status != StatusClosed {
+			if err != nil || !blocker.Status.IsTerminal() {
 				allResolved = false
 				break
 			}
@@ -276,14 +302,14 @@ func (s *Store) CloseMany(ids []string, reason string, actor string) error {
 	return nil
 }
 
-// Reopen sets a closed task back to open.
+// Reopen sets a closed or cancelled task back to open.
 func (s *Store) Reopen(id string, actor string) error {
 	task, err := s.Get(id)
 	if err != nil {
 		return err
 	}
-	if task.Status != StatusClosed {
-		return fmt.Errorf("task %s is not closed (status: %s)", id, task.Status)
+	if !task.Status.IsTerminal() {
+		return fmt.Errorf("task %s is not closed or cancelled (status: %s)", id, task.Status)
 	}
 
 	now := timeNowUTC()
