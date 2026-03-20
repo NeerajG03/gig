@@ -152,7 +152,21 @@ func (s *Store) Ready(parentID string) ([]*Task, error) {
 		     WHERE d.from_id = t.id
 		       AND d.dep_type = 'blocks'
 		       AND blocker.status NOT IN ('closed', 'cancelled')
-		   )`
+		   )
+		   AND (t.parent_id = '' OR NOT EXISTS (
+		     SELECT 1 FROM tasks p
+		     WHERE p.id = t.parent_id
+		       AND (
+		         p.status IN ('blocked', 'cancelled', 'closed')
+		         OR EXISTS (
+		           SELECT 1 FROM dependencies d
+		           JOIN tasks blocker ON blocker.id = d.to_id
+		           WHERE d.from_id = p.id
+		             AND d.dep_type = 'blocks'
+		             AND blocker.status NOT IN ('closed', 'cancelled')
+		         )
+		       )
+		   ))`
 
 	var args []any
 	if parentID != "" {

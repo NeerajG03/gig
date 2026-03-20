@@ -199,6 +199,17 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 		return nil
 	}
 
+	// Reject if any child is not closed.
+	children, err := s.Children(id)
+	if err != nil {
+		return fmt.Errorf("check children: %w", err)
+	}
+	for _, c := range children {
+		if c.Status != StatusClosed {
+			return fmt.Errorf("cannot close %s: child %s (%s) is %s — close all children first", id, c.ID, c.Title, c.Status)
+		}
+	}
+
 	now := timeNowUTC()
 	_, err = s.db.Exec(
 		"UPDATE tasks SET status = ?, closed_at = ?, close_reason = ?, updated_at = ? WHERE id = ?",
@@ -217,6 +228,7 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 }
 
 // CancelTask sets a task to cancelled with a reason. Also triggers auto-unblock.
+// Cancelling a parent cascades to all non-terminal children.
 func (s *Store) CancelTask(id string, reason string, actor string) error {
 	task, err := s.Get(id)
 	if err != nil {
@@ -240,6 +252,20 @@ func (s *Store) CancelTask(id string, reason string, actor string) error {
 	if err := s.autoUnblock(id, actor); err != nil {
 		return fmt.Errorf("auto-unblock after cancelling %s: %w", id, err)
 	}
+
+	// Cascade cancel to all non-terminal children.
+	children, err := s.Children(id)
+	if err != nil {
+		return fmt.Errorf("cascade cancel children: %w", err)
+	}
+	for _, c := range children {
+		if !c.Status.IsTerminal() {
+			if err := s.CancelTask(c.ID, "parent cancelled", actor); err != nil {
+				return fmt.Errorf("cascade cancel %s: %w", c.ID, err)
+			}
+		}
+	}
+
 	return nil
 }
 

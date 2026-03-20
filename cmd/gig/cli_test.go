@@ -169,12 +169,20 @@ func TestCLI_TreeClosedParentOpenChild(t *testing.T) {
 
 	parentID := strings.TrimSpace(run(t, bin, home, "create", "Parent epic", "--type", "epic", "--quiet"))
 	run(t, bin, home, "create", "Open child", "--parent", parentID)
-	run(t, bin, home, "close", parentID)
 
-	// Default tree: closed parent should still show because it has an open child.
-	out := run(t, bin, home, "list", "--tree")
-	assertContains(t, out, "Parent epic")
-	assertContains(t, out, "Open child")
+	// Closing parent with open children should fail.
+	cmd := exec.Command(bin, "--actor", "test", "close", parentID)
+	cmd.Env = append(os.Environ(), "GIG_HOME="+home)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected close to fail with open child")
+	}
+	assertContains(t, string(out), "close all children first")
+
+	// Parent stays open in tree with its open child.
+	treeOut := run(t, bin, home, "list", "--tree")
+	assertContains(t, treeOut, "Parent epic")
+	assertContains(t, treeOut, "Open child")
 }
 
 func TestCLI_TreeClosedParentClosedChildren(t *testing.T) {
@@ -202,14 +210,21 @@ func TestCLI_TreeDeepOpenDescendant(t *testing.T) {
 	epicID := strings.TrimSpace(run(t, bin, home, "create", "Top epic", "--type", "epic", "--quiet"))
 	midID := strings.TrimSpace(run(t, bin, home, "create", "Mid task", "--parent", epicID, "--quiet"))
 	run(t, bin, home, "create", "Leaf task", "--parent", midID)
-	run(t, bin, home, "close", midID)
-	run(t, bin, home, "close", epicID)
 
-	// Closed epic and closed mid should show because leaf is open.
-	out := run(t, bin, home, "list", "--tree")
-	assertContains(t, out, "Top epic")
-	assertContains(t, out, "Mid task")
-	assertContains(t, out, "Leaf task")
+	// Closing mid should fail because leaf is open.
+	cmd := exec.Command(bin, "--actor", "test", "close", midID)
+	cmd.Env = append(os.Environ(), "GIG_HOME="+home)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected close mid to fail with open leaf")
+	}
+	assertContains(t, string(out), "close all children first")
+
+	// All three should show in tree (all still open).
+	treeOut := run(t, bin, home, "list", "--tree")
+	assertContains(t, treeOut, "Top epic")
+	assertContains(t, treeOut, "Mid task")
+	assertContains(t, treeOut, "Leaf task")
 }
 
 func TestCLI_Close(t *testing.T) {
@@ -278,6 +293,106 @@ func TestCLI_Ready(t *testing.T) {
 	out := run(t, bin, home, "ready")
 	assertContains(t, out, "Blocker task")
 	assertNotContains(t, out, "Blocked task")
+}
+
+func TestCLI_CancelCascadesChildren(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Parent to cancel", "--quiet"))
+	child1ID := strings.TrimSpace(run(t, bin, home, "create", "Child one", "--parent", parentID, "--quiet"))
+	child2ID := strings.TrimSpace(run(t, bin, home, "create", "Child two", "--parent", parentID, "--quiet"))
+
+	run(t, bin, home, "cancel", parentID)
+
+	// All should be cancelled.
+	for _, id := range []string{parentID, child1ID, child2ID} {
+		out := run(t, bin, home, "show", id, "--json")
+		assertContains(t, out, "cancelled")
+	}
+}
+
+func TestCLI_CloseBlockedByOpenChild(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Parent to close", "--quiet"))
+	run(t, bin, home, "create", "Open child", "--parent", parentID)
+
+	// Close should fail.
+	cmd := exec.Command(bin, "--actor", "test", "close", parentID)
+	cmd.Env = append(os.Environ(), "GIG_HOME="+home)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatal("expected close to fail with open child")
+	}
+	assertContains(t, string(out), "close all children first")
+}
+
+func TestCLI_CloseSucceedsWhenChildrenClosed(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Closable parent", "--quiet"))
+	childID := strings.TrimSpace(run(t, bin, home, "create", "Closable child", "--parent", parentID, "--quiet"))
+
+	run(t, bin, home, "close", childID)
+	run(t, bin, home, "close", parentID)
+
+	out := run(t, bin, home, "show", parentID, "--json")
+	assertContains(t, out, "closed")
+}
+
+func TestCLI_ReadyExcludesBlockedParentChildren(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Blocked parent", "--quiet"))
+	run(t, bin, home, "create", "Child of blocked", "--parent", parentID)
+
+	// Block the parent via a dependency.
+	blockerID := strings.TrimSpace(run(t, bin, home, "create", "Blocker", "--quiet"))
+	run(t, bin, home, "dep", "add", parentID, blockerID)
+
+	// Parent is now blocked. Child should not appear in ready.
+	out := run(t, bin, home, "ready")
+	assertNotContains(t, out, "Child of blocked")
+	assertContains(t, out, "Blocker")
+}
+
+func TestCLI_ReadyExcludesCancelledParentChildren(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Cancelled parent", "--quiet"))
+	run(t, bin, home, "create", "Orphan child", "--parent", parentID)
+
+	run(t, bin, home, "cancel", parentID)
+
+	// Child is cascade-cancelled so should not appear in ready.
+	out := run(t, bin, home, "ready")
+	assertNotContains(t, out, "Orphan child")
+}
+
+func TestCLI_ReadyTreeView(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Epic", "--type", "epic", "--quiet"))
+	run(t, bin, home, "create", "Ready subtask", "--parent", parentID)
+
+	// Default ready should show tree with parent context.
+	out := run(t, bin, home, "ready")
+	assertContains(t, out, "Epic")
+	assertContains(t, out, "Ready subtask")
+	// Tree connectors should be present.
+	assertContains(t, out, "└──")
+}
+
+func TestCLI_ReadyListFlag(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Epic", "--type", "epic", "--quiet"))
+	run(t, bin, home, "create", "Ready subtask", "--parent", parentID)
+
+	// --list should show flat output without tree connectors.
+	out := run(t, bin, home, "ready", "--list")
+	assertContains(t, out, "Ready subtask")
+	assertNotContains(t, out, "└──")
 }
 
 func TestCLI_ConfigSet(t *testing.T) {
