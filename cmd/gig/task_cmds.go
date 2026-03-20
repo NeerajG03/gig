@@ -379,6 +379,7 @@ func printTaskTable(tasks []*gig.Task) {
 		padded := fmt.Sprintf("%-*s", maxID, t.ID)
 		fmt.Printf("%s %s %s %s%s\n", colorize(dim, padded), colorStatus(t.Status), colorPriority(t.Priority), t.Title, assignee)
 	}
+	printLegend()
 }
 
 func statusIcon(s gig.Status) string {

@@ -97,3 +97,16 @@ func colorAssignee(assignee string) string {
 func colorID(id string) string {
 	return colorize(dim, id)
 }
+
+// printLegend prints a status icon legend below task listings.
+func printLegend() {
+	fmt.Printf("\n%s %s open  %s in_progress  %s closed  %s cancelled  %s blocked  %s deferred\n",
+		colorize(dim, "Legend:"),
+		colorStatus(gig.StatusOpen),
+		colorStatus(gig.StatusInProgress),
+		colorStatus(gig.StatusClosed),
+		colorStatus(gig.StatusCancelled),
+		colorStatus(gig.StatusBlocked),
+		colorStatus(gig.StatusDeferred),
+	)
+}

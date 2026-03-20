@@ -194,6 +194,7 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 			printSubtaskTree(tree.Children, "  ")
 		}
 	}
+	printLegend()
 	return nil
 }
 
