@@ -102,10 +102,10 @@ func showCmd() *cobra.Command {
 			if len(task.Labels) > 0 {
 				fmt.Printf("%s  %s\n", colorize(dim, "Labels:"), strings.Join(task.Labels, ", "))
 			}
-			fmt.Printf("%s %s\n", colorize(dim, "Created:"), task.CreatedAt.Format("2006-01-02 15:04"))
-			fmt.Printf("%s %s\n", colorize(dim, "Updated:"), task.UpdatedAt.Format("2006-01-02 15:04"))
+			fmt.Printf("%s %s\n", colorize(dim, "Created:"), task.CreatedAt.Format(timeFormatFull))
+			fmt.Printf("%s %s\n", colorize(dim, "Updated:"), task.UpdatedAt.Format(timeFormatFull))
 			if task.ClosedAt != nil {
-				fmt.Printf("%s  %s\n", colorize(dim, "Closed:"), task.ClosedAt.Format("2006-01-02 15:04"))
+				fmt.Printf("%s  %s\n", colorize(dim, "Closed:"), task.ClosedAt.Format(timeFormatFull))
 			}
 			if task.CloseReason != "" {
 				fmt.Printf("%s  %s\n", colorize(dim, "Reason:"), task.CloseReason)
@@ -119,13 +119,13 @@ func showCmd() *cobra.Command {
 					if author == "" {
 						author = "anonymous"
 					}
-					fmt.Printf("  %s %s: %s\n", colorize(dim, "["+c.CreatedAt.Format("01-02 15:04")+"]"), colorize(cyan, author), c.Content)
+					fmt.Printf("  %s %s: %s\n", colorize(dim, "["+c.CreatedAt.Format(timeFormatShort)+"]"), colorize(cyan, author), c.Content)
 				}
 			}
 
 			cp, _ := store.LatestCheckpoint(task.ID)
 			if cp != nil {
-				fmt.Printf("\n%s %s\n", colorize(dim, "Latest checkpoint:"), colorize(dim, "["+cp.CreatedAt.Format("2006-01-02 15:04")+"]"))
+				fmt.Printf("\n%s %s\n", colorize(dim, "Latest checkpoint:"), colorize(dim, "["+cp.CreatedAt.Format(timeFormatFull)+"]"))
 				fmt.Printf("  %s %s\n", colorize(dim, "Done:"), cp.Done)
 				if cp.Decisions != "" {
 					fmt.Printf("  %s %s\n", colorize(dim, "Decisions:"), cp.Decisions)

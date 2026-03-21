@@ -78,7 +78,7 @@ func checkpointsCmd() *cobra.Command {
 				if author == "" {
 					author = "anonymous"
 				}
-				fmt.Printf("[%s] %s\n", cp.CreatedAt.Format("2006-01-02 15:04"), author)
+				fmt.Printf("[%s] %s\n", cp.CreatedAt.Format(timeFormatFull), author)
 				fmt.Printf("  Done:      %s\n", cp.Done)
 				if cp.Decisions != "" {
 					fmt.Printf("  Decisions: %s\n", cp.Decisions)

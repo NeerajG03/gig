@@ -54,7 +54,7 @@ func commentsCmd() *cobra.Command {
 				if author == "" {
 					author = "anonymous"
 				}
-				fmt.Printf("[%s] %s: %s\n", c.CreatedAt.Format("2006-01-02 15:04"), author, c.Content)
+				fmt.Printf("[%s] %s: %s\n", c.CreatedAt.Format(timeFormatFull), author, c.Content)
 			}
 			return nil
 		},

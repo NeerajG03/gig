@@ -9,6 +9,12 @@ import (
 	"github.com/NeerajG03/gig"
 )
 
+// Time display formats used across CLI output.
+const (
+	timeFormatFull  = "2006-01-02 15:04"
+	timeFormatShort = "01-02 15:04"
+)
+
 // ANSI color codes.
 const (
 	reset   = "\033[0m"

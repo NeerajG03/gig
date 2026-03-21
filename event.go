@@ -42,8 +42,8 @@ func (s *Store) scanEvents(rows interface{ Next() bool; Scan(...any) error; Err(
 		if err := rows.Scan(&e.ID, &e.TaskID, &e.Type, &e.Actor, &e.Field, &e.OldValue, &e.NewValue, &ts); err != nil {
 			return nil, fmt.Errorf("scan event: %w", err)
 		}
-		if t, err := time.Parse(timeFormat, ts); err == nil {
-			e.Timestamp = t
+		if t := strToTime(ts); t != nil {
+			e.Timestamp = *t
 		}
 		events = append(events, &e)
 	}

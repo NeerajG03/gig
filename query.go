@@ -6,6 +6,17 @@ import (
 	"strings"
 )
 
+// taskColumns is the canonical SELECT column list for the tasks table.
+// Every query that returns Task rows must use this constant.
+const taskColumns = `id, parent_id, title, description, status, priority, assignee,
+	  task_type, labels, notes, estimate, due_at, created_at, updated_at,
+	  closed_at, close_reason, created_by, metadata`
+
+// rowScanner is satisfied by both *sql.Row and *sql.Rows.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
 // List returns tasks matching the given filters.
 func (s *Store) List(p ListParams) ([]*Task, error) {
 	where := []string{}
@@ -52,9 +63,7 @@ func (s *Store) List(p ListParams) ([]*Task, error) {
 		where = append(where, "status NOT IN ("+strings.Join(placeholders, ",")+")")
 	}
 
-	query := `SELECT id, parent_id, title, description, status, priority, assignee,
-	  task_type, labels, notes, estimate, due_at, created_at, updated_at,
-	  closed_at, close_reason, created_by, metadata FROM tasks`
+	query := `SELECT ` + taskColumns + ` FROM tasks`
 
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
@@ -81,10 +90,7 @@ func (s *Store) List(p ListParams) ([]*Task, error) {
 func (s *Store) Search(query string) ([]*Task, error) {
 	pattern := "%" + query + "%"
 	rows, err := s.db.Query(
-		`SELECT id, parent_id, title, description, status, priority, assignee,
-		  task_type, labels, notes, estimate, due_at, created_at, updated_at,
-		  closed_at, close_reason, created_by, metadata
-		 FROM tasks WHERE title LIKE ? OR description LIKE ?
+		`SELECT `+taskColumns+` FROM tasks WHERE title LIKE ? OR description LIKE ?
 		 ORDER BY updated_at DESC`,
 		pattern, pattern,
 	)
@@ -99,10 +105,7 @@ func (s *Store) Search(query string) ([]*Task, error) {
 // Children returns the direct children of a task.
 func (s *Store) Children(id string) ([]*Task, error) {
 	rows, err := s.db.Query(
-		`SELECT id, parent_id, title, description, status, priority, assignee,
-		  task_type, labels, notes, estimate, due_at, created_at, updated_at,
-		  closed_at, close_reason, created_by, metadata
-		 FROM tasks WHERE parent_id = ?
+		`SELECT `+taskColumns+` FROM tasks WHERE parent_id = ?
 		 ORDER BY priority ASC, created_at ASC`, id,
 	)
 	if err != nil {
@@ -143,8 +146,7 @@ func (s *Store) GetTree(id string) (*Task, error) {
 func (s *Store) Ready(parentID string) ([]*Task, error) {
 	query := `SELECT t.id, t.parent_id, t.title, t.description, t.status, t.priority,
 		  t.assignee, t.task_type, t.labels, t.notes, t.estimate, t.due_at,
-		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata
-		 FROM tasks t
+		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata FROM tasks t
 		 WHERE t.status = 'open'
 		   AND NOT EXISTS (
 		     SELECT 1 FROM dependencies d
@@ -191,8 +193,7 @@ func (s *Store) Blocked() ([]*Task, error) {
 	rows, err := s.db.Query(
 		`SELECT t.id, t.parent_id, t.title, t.description, t.status, t.priority,
 		  t.assignee, t.task_type, t.labels, t.notes, t.estimate, t.due_at,
-		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata
-		 FROM tasks t
+		  t.created_at, t.updated_at, t.closed_at, t.close_reason, t.created_by, t.metadata FROM tasks t
 		 WHERE t.status NOT IN ('closed', 'cancelled')
 		   AND EXISTS (
 		     SELECT 1 FROM dependencies d
@@ -211,13 +212,13 @@ func (s *Store) Blocked() ([]*Task, error) {
 	return s.scanTasks(rows)
 }
 
-// scanTask reads a single task from a row scanner.
-func (s *Store) scanTask(row *sql.Row) (*Task, error) {
+// scanTaskRow scans a single task from any row scanner (*sql.Row or *sql.Rows).
+func scanTaskRow(sc rowScanner) (*Task, error) {
 	var t Task
 	var parentID sql.NullString
 	var labelsJSON, dueAt, closedAt, createdAt, updatedAt string
 
-	err := row.Scan(
+	err := sc.Scan(
 		&t.ID, &parentID, &t.Title, &t.Description, &t.Status, &t.Priority,
 		&t.Assignee, &t.Type, &labelsJSON, &t.Notes, &t.Estimate, &dueAt,
 		&createdAt, &updatedAt, &closedAt, &t.CloseReason, &t.CreatedBy, &t.Metadata,
@@ -245,38 +246,20 @@ func (s *Store) scanTask(row *sql.Row) (*Task, error) {
 	return &t, nil
 }
 
+// scanTask reads a single task from a row.
+func (s *Store) scanTask(row *sql.Row) (*Task, error) {
+	return scanTaskRow(row)
+}
+
 // scanTasks reads multiple tasks from rows.
 func (s *Store) scanTasks(rows *sql.Rows) ([]*Task, error) {
 	var tasks []*Task
 	for rows.Next() {
-		var t Task
-		var parentID sql.NullString
-		var labelsJSON, dueAt, closedAt, createdAt, updatedAt string
-
-		err := rows.Scan(
-			&t.ID, &parentID, &t.Title, &t.Description, &t.Status, &t.Priority,
-			&t.Assignee, &t.Type, &labelsJSON, &t.Notes, &t.Estimate, &dueAt,
-			&createdAt, &updatedAt, &closedAt, &t.CloseReason, &t.CreatedBy, &t.Metadata,
-		)
+		t, err := scanTaskRow(rows)
 		if err != nil {
-			return nil, fmt.Errorf("scan task row: %w", err)
+			return nil, err
 		}
-
-		if parentID.Valid {
-			t.ParentID = parentID.String
-		}
-		t.Labels = labelsFromJSON(labelsJSON)
-		t.DueAt = strToTime(dueAt)
-		t.ClosedAt = strToTime(closedAt)
-		if ct := strToTime(createdAt); ct != nil {
-			t.CreatedAt = *ct
-		}
-		if ut := strToTime(updatedAt); ut != nil {
-			t.UpdatedAt = *ut
-		}
-
-		tasks = append(tasks, &t)
+		tasks = append(tasks, t)
 	}
-
 	return tasks, rows.Err()
 }

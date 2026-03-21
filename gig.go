@@ -5,6 +5,7 @@ package gig
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -30,12 +31,7 @@ func (s Status) IsTerminal() bool {
 
 // IsValid returns true if s is a recognized status.
 func (s Status) IsValid() bool {
-	for _, v := range ValidStatuses {
-		if s == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ValidStatuses, s)
 }
 
 // Priority represents task urgency (0 = critical, 4 = backlog).
@@ -87,12 +83,7 @@ var ValidTaskTypes = []TaskType{TypeTask, TypeBug, TypeFeature, TypeEpic, TypeCh
 
 // IsValid returns true if t is a recognized task type.
 func (t TaskType) IsValid() bool {
-	for _, v := range ValidTaskTypes {
-		if t == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ValidTaskTypes, t)
 }
 
 // DepType describes the relationship between two tasks.
@@ -212,12 +203,7 @@ var ValidAttrTypes = []AttrType{AttrString, AttrBoolean, AttrObject}
 
 // IsValid returns true if t is a recognized attribute type.
 func (t AttrType) IsValid() bool {
-	for _, v := range ValidAttrTypes {
-		if t == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ValidAttrTypes, t)
 }
 
 // AttrDefinition describes an allowed custom attribute key and its type.

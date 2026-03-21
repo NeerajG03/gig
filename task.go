@@ -81,10 +81,7 @@ func (s *Store) Create(p CreateParams) (*Task, error) {
 // Get retrieves a single task by ID.
 func (s *Store) Get(id string) (*Task, error) {
 	return s.scanTask(s.db.QueryRow(
-		`SELECT id, parent_id, title, description, status, priority, assignee,
-		  task_type, labels, notes, estimate, due_at, created_at, updated_at,
-		  closed_at, close_reason, created_by, metadata
-		 FROM tasks WHERE id = ?`, id,
+		`SELECT `+taskColumns+` FROM tasks WHERE id = ?`, id,
 	))
 }
 
@@ -251,7 +248,7 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 	if err != nil {
 		return err
 	}
-	if task.Status == StatusClosed {
+	if task.Status.IsTerminal() {
 		return nil
 	}
 
@@ -463,8 +460,8 @@ func (s *Store) Claim(id string, assignee string) (*ClaimResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	if task.Status == StatusClosed {
-		return nil, fmt.Errorf("cannot claim closed task %s", id)
+	if task.Status.IsTerminal() {
+		return nil, fmt.Errorf("cannot claim %s task %s", task.Status, id)
 	}
 
 	now := timeNowUTC()

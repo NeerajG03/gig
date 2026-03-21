@@ -76,20 +76,20 @@ func eventsCmd() *cobra.Command {
 				switch e.Type {
 				case gig.EventStatusChanged:
 					fmt.Printf("[%s] %s: status %s -> %s (%s)\n",
-						e.Timestamp.Format("01-02 15:04"), actor, e.OldValue, e.NewValue, e.Type)
+						e.Timestamp.Format(timeFormatShort), actor, e.OldValue, e.NewValue, e.Type)
 				case gig.EventAssigned:
 					fmt.Printf("[%s] %s: assigned to %s\n",
-						e.Timestamp.Format("01-02 15:04"), actor, e.NewValue)
+						e.Timestamp.Format(timeFormatShort), actor, e.NewValue)
 				case gig.EventCommented:
 					fmt.Printf("[%s] %s: commented\n",
-						e.Timestamp.Format("01-02 15:04"), actor)
+						e.Timestamp.Format(timeFormatShort), actor)
 				default:
 					detail := ""
 					if e.Field != "" {
 						detail = fmt.Sprintf(" (%s: %s -> %s)", e.Field, e.OldValue, e.NewValue)
 					}
 					fmt.Printf("[%s] %s: %s%s\n",
-						e.Timestamp.Format("01-02 15:04"), actor, e.Type, detail)
+						e.Timestamp.Format(timeFormatShort), actor, e.Type, detail)
 				}
 			}
 			return nil
