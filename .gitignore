@@ -26,3 +26,6 @@ Thumbs.db
 *.db
 *.db-shm
 *.db-wal
+
+# Personal scripts (may contain credentials)
+scripts/sync-notion.py
