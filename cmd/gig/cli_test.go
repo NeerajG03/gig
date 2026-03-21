@@ -204,6 +204,24 @@ func TestCLI_TreeClosedParentClosedChildren(t *testing.T) {
 	assertContains(t, out, "Done child")
 }
 
+func TestCLI_TreeCancelledHiddenByDefault(t *testing.T) {
+	bin, home := setupGig(t)
+
+	parentID := strings.TrimSpace(run(t, bin, home, "create", "Cancel epic", "--type", "epic", "--quiet"))
+	run(t, bin, home, "create", "Cancel child", "--parent", parentID)
+	run(t, bin, home, "cancel", parentID)
+
+	// Default tree: cancelled subtree should be hidden.
+	out := run(t, bin, home, "list", "--tree")
+	assertNotContains(t, out, "Cancel epic")
+	assertNotContains(t, out, "Cancel child")
+
+	// With --all: both should appear.
+	out = run(t, bin, home, "list", "--tree", "--all")
+	assertContains(t, out, "Cancel epic")
+	assertContains(t, out, "Cancel child")
+}
+
 func TestCLI_TreeDeepOpenDescendant(t *testing.T) {
 	bin, home := setupGig(t)
 
