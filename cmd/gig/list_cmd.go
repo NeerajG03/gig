@@ -159,7 +159,7 @@ func listTree(cmd *cobra.Command, params gig.ListParams, includeAll bool) error 
 			trees = filterTreeInclude(trees, *includeStatus)
 		}
 		if !includeAll {
-			trees = filterTree(trees, []gig.Status{gig.StatusClosed})
+			trees = filterTree(trees, []gig.Status{gig.StatusClosed, gig.StatusCancelled})
 		}
 		return trees, nil
 	}
