@@ -82,6 +82,67 @@ func TestUpdate(t *testing.T) {
 	}
 }
 
+func TestUpdateParentID(t *testing.T) {
+	store, _ := tempDB(t)
+	parent, _ := store.Create(CreateParams{Title: "Parent", Type: TypeEpic})
+	child, _ := store.Create(CreateParams{Title: "Orphan"})
+
+	updated, err := store.Update(child.ID, UpdateParams{ParentID: &parent.ID}, "test")
+	if err != nil {
+		t.Fatalf("reparent: %v", err)
+	}
+	if updated.ParentID != parent.ID {
+		t.Errorf("parent_id = %q, want %q", updated.ParentID, parent.ID)
+	}
+}
+
+func TestUpdateParentIDOrphan(t *testing.T) {
+	store, _ := tempDB(t)
+	parent, _ := store.Create(CreateParams{Title: "Parent", Type: TypeEpic})
+	child, _ := store.Create(CreateParams{Title: "Child", ParentID: parent.ID})
+
+	updated, err := store.Update(child.ID, UpdateParams{Orphan: true}, "test")
+	if err != nil {
+		t.Fatalf("orphan: %v", err)
+	}
+	if updated.ParentID != "" {
+		t.Errorf("parent_id = %q, want empty", updated.ParentID)
+	}
+}
+
+func TestUpdateParentIDSelfFails(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "Task"})
+
+	_, err := store.Update(task.ID, UpdateParams{ParentID: &task.ID}, "test")
+	if err == nil {
+		t.Error("expected error for self-parent")
+	}
+}
+
+func TestUpdateParentIDInvalidFails(t *testing.T) {
+	store, _ := tempDB(t)
+	task, _ := store.Create(CreateParams{Title: "Task"})
+
+	bad := "nonexistent"
+	_, err := store.Update(task.ID, UpdateParams{ParentID: &bad}, "test")
+	if err == nil {
+		t.Error("expected error for invalid parent")
+	}
+}
+
+func TestUpdateParentIDEmptyFails(t *testing.T) {
+	store, _ := tempDB(t)
+	parent, _ := store.Create(CreateParams{Title: "Parent"})
+	child, _ := store.Create(CreateParams{Title: "Child", ParentID: parent.ID})
+
+	empty := ""
+	_, err := store.Update(child.ID, UpdateParams{ParentID: &empty}, "test")
+	if err == nil {
+		t.Error("expected error for empty parent ID")
+	}
+}
+
 func TestUpdateStatus(t *testing.T) {
 	store, _ := tempDB(t)
 	task, _ := store.Create(CreateParams{Title: "Task"})
@@ -95,6 +156,7 @@ func TestUpdateStatus(t *testing.T) {
 		t.Errorf("status = %q, want 'in_progress'", got.Status)
 	}
 }
+
 
 func TestCloseAndReopen(t *testing.T) {
 	store, _ := tempDB(t)

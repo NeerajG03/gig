@@ -282,6 +282,8 @@ type UpdateParams struct {
 	Estimate    *int
 	DueAt       *time.Time
 	Metadata    *string
+	ParentID    *string // set parent (non-empty ID)
+	Orphan      bool    // remove parent (set parent_id to NULL)
 }
 
 // ListParams controls filtering and pagination for List queries.

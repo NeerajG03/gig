@@ -183,9 +183,9 @@ func showCmd() *cobra.Command {
 }
 
 func updateCmd() *cobra.Command {
-	var title, desc, status, assignee, notes, labels string
+	var title, desc, status, assignee, notes, labels, parent string
 	var priority int
-	var claim bool
+	var claim, orphan bool
 
 	cmd := &cobra.Command{
 		Use:               "update <id>",
@@ -235,6 +235,12 @@ func updateCmd() *cobra.Command {
 				l := strings.Split(labels, ",")
 				params.Labels = &l
 			}
+			if cmd.Flags().Changed("parent") {
+				params.ParentID = &parent
+			}
+			if orphan {
+				params.Orphan = true
+			}
 
 			task, err := store.Update(id, params, actorName)
 			if err != nil {
@@ -256,7 +262,10 @@ func updateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&assignee, "assignee", "", "New assignee")
 	cmd.Flags().StringVar(&notes, "notes", "", "New notes")
 	cmd.Flags().StringVar(&labels, "labels", "", "New labels (comma-separated)")
+	cmd.Flags().StringVar(&parent, "parent", "", "Set parent task ID")
+	cmd.Flags().BoolVar(&orphan, "orphan", false, "Remove parent (make top-level)")
 	cmd.Flags().BoolVar(&claim, "claim", false, "Claim task (set assignee + in_progress)")
+	cmd.MarkFlagsMutuallyExclusive("parent", "orphan")
 
 	_ = cmd.RegisterFlagCompletionFunc("status", statusCompletion)
 	_ = cmd.RegisterFlagCompletionFunc("priority", priorityCompletion)

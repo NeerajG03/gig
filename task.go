@@ -22,11 +22,8 @@ func (s *Store) Create(p CreateParams) (*Task, error) {
 	}
 
 	// Verify parent exists if specified.
-	if p.ParentID != "" {
-		var exists int
-		if err := s.db.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", p.ParentID).Scan(&exists); err != nil || exists == 0 {
-			return nil, fmt.Errorf("parent task %s not found", p.ParentID)
-		}
+	if err := s.validateTaskExists(p.ParentID); err != nil {
+		return nil, err
 	}
 
 	now := timeNowUTC()
@@ -91,6 +88,20 @@ func (s *Store) Get(id string) (*Task, error) {
 	))
 }
 
+func (s *Store) validateTaskExists(taskID string) error {
+	if taskID == "" {
+		return nil
+	}
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&count); err != nil {
+		return fmt.Errorf("parent task not found: %w", err)
+	}
+	if count == 0 {
+		return fmt.Errorf("parent task not found")
+	}
+	return nil
+}
+
 // Update modifies fields of an existing task.
 func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 	task, err := s.Get(id)
@@ -125,6 +136,23 @@ func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 		s.recordEvent(id, EventUpdated, actor, "labels", labelsToJSON(task.Labels), labelsToJSON(*p.Labels))
 		sets = append(sets, "labels = ?")
 		args = append(args, labelsToJSON(*p.Labels))
+	}
+	if p.Orphan && task.ParentID != "" {
+		s.recordEvent(id, EventUpdated, actor, "parent_id", task.ParentID, "")
+		sets = append(sets, "parent_id = NULL")
+	} else if p.ParentID != nil && *p.ParentID != task.ParentID {
+		if *p.ParentID == "" {
+			return nil, fmt.Errorf("parent ID cannot be empty, use Orphan to remove parent")
+		}
+		if *p.ParentID == id {
+			return nil, fmt.Errorf("task cannot be its own parent")
+		}
+		if err := s.validateTaskExists(*p.ParentID); err != nil {
+			return nil, err
+		}
+		s.recordEvent(id, EventUpdated, actor, "parent_id", task.ParentID, *p.ParentID)
+		sets = append(sets, "parent_id = ?")
+		args = append(args, *p.ParentID)
 	}
 	if p.Notes != nil && *p.Notes != task.Notes {
 		s.recordEvent(id, EventUpdated, actor, "notes", task.Notes, *p.Notes)
