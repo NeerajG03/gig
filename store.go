@@ -93,6 +93,12 @@ func Open(dbPath string, opts ...Option) (*Store, error) {
 		return nil, fmt.Errorf("enable WAL: %w", err)
 	}
 
+	// Wait up to 5s when the database is locked by another process (multi-agent).
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("set busy timeout: %w", err)
+	}
+
 	// Enable foreign key enforcement.
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		db.Close()
