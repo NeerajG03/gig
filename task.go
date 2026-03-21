@@ -88,6 +88,26 @@ func (s *Store) Get(id string) (*Task, error) {
 	))
 }
 
+// GetFull retrieves a task with its custom attributes populated.
+func (s *Store) GetFull(id string) (*Task, error) {
+	task, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+
+	attrs, err := s.Attrs(id)
+	if err != nil {
+		return task, nil 
+	}
+	if len(attrs) > 0 {
+		task.Attrs = make(map[string]string, len(attrs))
+		for _, a := range attrs {
+			task.Attrs[a.Key] = a.Value
+		}
+	}
+	return task, nil
+}
+
 func (s *Store) validateTaskExists(taskID string) error {
 	if taskID == "" {
 		return nil

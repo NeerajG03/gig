@@ -73,7 +73,7 @@ func showCmd() *cobra.Command {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: taskIDCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			task, err := store.Get(args[0])
+			task, err := store.GetFull(args[0])
 			if err != nil {
 				return err
 			}

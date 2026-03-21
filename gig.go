@@ -142,6 +142,9 @@ type Task struct {
 
 	// Populated by GetTree — not stored in DB directly.
 	Children []*Task `json:"children,omitempty"`
+
+	// Populated by GetFull — not stored in DB directly.
+	Attrs map[string]string `json:"attrs,omitempty"`
 }
 
 // Comment is a note attached to a task.
