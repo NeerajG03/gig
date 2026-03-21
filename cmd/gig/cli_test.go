@@ -177,7 +177,7 @@ func TestCLI_TreeClosedParentOpenChild(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected close to fail with open child")
 	}
-	assertContains(t, string(out), "close all children first")
+	assertContains(t, string(out), "close or cancel all children first")
 
 	// Parent stays open in tree with its open child.
 	treeOut := run(t, bin, home, "list", "--tree")
@@ -236,7 +236,7 @@ func TestCLI_TreeDeepOpenDescendant(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected close mid to fail with open leaf")
 	}
-	assertContains(t, string(out), "close all children first")
+	assertContains(t, string(out), "close or cancel all children first")
 
 	// All three should show in tree (all still open).
 	treeOut := run(t, bin, home, "list", "--tree")
@@ -342,7 +342,7 @@ func TestCLI_CloseBlockedByOpenChild(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected close to fail with open child")
 	}
-	assertContains(t, string(out), "close all children first")
+	assertContains(t, string(out), "close or cancel all children first")
 }
 
 func TestCLI_CloseSucceedsWhenChildrenClosed(t *testing.T) {
