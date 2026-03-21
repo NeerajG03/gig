@@ -207,7 +207,7 @@ func TestClaim(t *testing.T) {
 	store, _ := tempDB(t)
 	task, _ := store.Create(CreateParams{Title: "Task"})
 
-	if err := store.Claim(task.ID, "agent-1"); err != nil {
+	if _, err := store.Claim(task.ID, "agent-1"); err != nil {
 		t.Fatalf("claim: %v", err)
 	}
 
@@ -473,7 +473,7 @@ func TestReadyExcludesInProgress(t *testing.T) {
 	claimed, _ := store.Create(CreateParams{Title: "Claimed task"})
 
 	// Claim one task — it becomes in_progress.
-	store.Claim(claimed.ID, "agent")
+	store.Claim(claimed.ID, "agent") //nolint:errcheck
 
 	ready, err := store.Ready("")
 	if err != nil {
@@ -716,5 +716,66 @@ func TestDeleteNonexistent(t *testing.T) {
 	err := store.DeleteTask("nonexistent", "test")
 	if err == nil {
 		t.Error("expected error deleting nonexistent task")
+	}
+}
+
+func TestClaimAutoProgressParent(t *testing.T) {
+	store, _ := tempDB(t)
+
+	parent, err := store.Create(CreateParams{Title: "Parent", Type: TypeEpic})
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := store.Create(CreateParams{Title: "Child", Type: TypeTask, ParentID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Parent should be open.
+	p, _ := store.Get(parent.ID)
+	if p.Status != StatusOpen {
+		t.Fatalf("expected parent open, got %s", p.Status)
+	}
+
+	// Claim child — parent should auto-progress to in_progress.
+	result, err := store.Claim(child.ID, "neeraj")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !result.ParentProgressed {
+		t.Error("expected ParentProgressed=true")
+	}
+	if result.ParentID != parent.ID {
+		t.Errorf("expected ParentID=%s, got %s", parent.ID, result.ParentID)
+	}
+
+	p, _ = store.Get(parent.ID)
+	if p.Status != StatusInProgress {
+		t.Errorf("expected parent in_progress after child claimed, got %s", p.Status)
+	}
+}
+
+func TestClaimDoesNotRegressParent(t *testing.T) {
+	store, _ := tempDB(t)
+
+	parent, _ := store.Create(CreateParams{Title: "Parent", Type: TypeEpic})
+	child1, _ := store.Create(CreateParams{Title: "Child 1", Type: TypeTask, ParentID: parent.ID})
+	child2, _ := store.Create(CreateParams{Title: "Child 2", Type: TypeTask, ParentID: parent.ID})
+
+	// Claim first child — parent goes to in_progress.
+	store.Claim(child1.ID, "neeraj") //nolint:errcheck
+
+	p, _ := store.Get(parent.ID)
+	if p.Status != StatusInProgress {
+		t.Fatalf("expected in_progress, got %s", p.Status)
+	}
+
+	// Claim second child — parent should stay in_progress (not regress).
+	store.Claim(child2.ID, "neeraj") //nolint:errcheck
+
+	p, _ = store.Get(parent.ID)
+	if p.Status != StatusInProgress {
+		t.Errorf("parent should still be in_progress, got %s", p.Status)
 	}
 }

@@ -199,18 +199,38 @@ func updateCmd() *cobra.Command {
 				if assignee == "" {
 					assignee = actorName
 				}
-				if err := store.Claim(id, assignee); err != nil {
+				result, err := store.Claim(id, assignee)
+				if err != nil {
 					return err
 				}
 				fmt.Printf("Claimed %s by %s\n", id, assignee)
+				if result.ParentProgressed {
+					fmt.Printf("Parent %s → in_progress\n", result.ParentID)
+				}
 				return nil
 			}
 
 			if status != "" {
+				// Check parent before to detect auto-progress.
+				task, _ := store.Get(id)
+				var parentStatusBefore gig.Status
+				if task != nil && task.ParentID != "" {
+					if p, err := store.Get(task.ParentID); err == nil {
+						parentStatusBefore = p.Status
+					}
+				}
+
 				if err := store.UpdateStatus(id, gig.Status(status), actorName); err != nil {
 					return err
 				}
 				fmt.Printf("Status of %s set to %s\n", id, status)
+
+				// Report parent auto-progress.
+				if task != nil && task.ParentID != "" && parentStatusBefore == gig.StatusOpen {
+					if p, err := store.Get(task.ParentID); err == nil && p.Status == gig.StatusInProgress {
+						fmt.Printf("Parent %s → in_progress\n", task.ParentID)
+					}
+				}
 				return nil
 			}
 

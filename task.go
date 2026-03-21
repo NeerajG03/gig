@@ -210,6 +210,8 @@ func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 }
 
 // UpdateStatus changes a task's status.
+// If the task transitions to in_progress and has a parent that is open,
+// the parent is auto-progressed to in_progress.
 func (s *Store) UpdateStatus(id string, status Status, actor string) error {
 	if !status.IsValid() {
 		return fmt.Errorf("invalid status: %s", status)
@@ -234,6 +236,12 @@ func (s *Store) UpdateStatus(id string, status Status, actor string) error {
 	}
 
 	s.recordEvent(id, EventStatusChanged, actor, "status", string(task.Status), string(status))
+
+	// Auto-progress parent when child becomes active.
+	if status == StatusInProgress {
+		s.autoProgressParent(task.ParentID, actor)
+	}
+
 	return nil
 }
 
@@ -442,14 +450,21 @@ func (s *Store) DeleteTask(id string, actor string) error {
 	return nil
 }
 
+// ClaimResult holds information about what happened during a Claim.
+type ClaimResult struct {
+	ParentProgressed bool   // true if parent was auto-moved to in_progress
+	ParentID         string // parent task ID (if progressed)
+}
+
 // Claim atomically sets assignee and status to in_progress.
-func (s *Store) Claim(id string, assignee string) error {
+// If the task has a parent that is open, it is auto-progressed to in_progress.
+func (s *Store) Claim(id string, assignee string) (*ClaimResult, error) {
 	task, err := s.Get(id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if task.Status == StatusClosed {
-		return fmt.Errorf("cannot claim closed task %s", id)
+		return nil, fmt.Errorf("cannot claim closed task %s", id)
 	}
 
 	now := timeNowUTC()
@@ -458,7 +473,7 @@ func (s *Store) Claim(id string, assignee string) error {
 		assignee, string(StatusInProgress), now.Format(timeFormat), id,
 	)
 	if err != nil {
-		return fmt.Errorf("claim task: %w", err)
+		return nil, fmt.Errorf("claim task: %w", err)
 	}
 
 	if task.Assignee != assignee {
@@ -467,5 +482,36 @@ func (s *Store) Claim(id string, assignee string) error {
 	if task.Status != StatusInProgress {
 		s.recordEvent(id, EventStatusChanged, assignee, "status", string(task.Status), string(StatusInProgress))
 	}
-	return nil
+
+	result := &ClaimResult{}
+
+	// Auto-progress parent when child becomes active.
+	if s.autoProgressParent(task.ParentID, assignee) {
+		result.ParentProgressed = true
+		result.ParentID = task.ParentID
+	}
+
+	return result, nil
+}
+
+// autoProgressParent moves a parent task from open to in_progress
+// when one of its children becomes active. Returns true if progressed.
+func (s *Store) autoProgressParent(parentID, actor string) bool {
+	if parentID == "" {
+		return false
+	}
+	parent, err := s.Get(parentID)
+	if err != nil || parent.Status != StatusOpen {
+		return false
+	}
+	now := timeNowUTC()
+	_, err = s.db.Exec(
+		"UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+		string(StatusInProgress), now.Format(timeFormat), parent.ID,
+	)
+	if err != nil {
+		return false
+	}
+	s.recordEvent(parent.ID, EventStatusChanged, actor, "status", string(StatusOpen), string(StatusInProgress))
+	return true
 }
