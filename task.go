@@ -255,14 +255,14 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 		return nil
 	}
 
-	// Reject if any child is not closed.
+	// Reject if any child is not terminal (closed or cancelled).
 	children, err := s.Children(id)
 	if err != nil {
 		return fmt.Errorf("check children: %w", err)
 	}
 	for _, c := range children {
-		if c.Status != StatusClosed {
-			return fmt.Errorf("cannot close %s: child %s (%s) is %s — close all children first", id, c.ID, c.Title, c.Status)
+		if !c.Status.IsTerminal() {
+			return fmt.Errorf("cannot close %s: child %s (%s) is %s — close or cancel all children first", id, c.ID, c.Title, c.Status)
 		}
 	}
 
