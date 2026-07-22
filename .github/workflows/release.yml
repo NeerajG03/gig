@@ -36,8 +36,8 @@ jobs:
 
       - name: Run Tests
         run: |
-          go test ./... -count=1
-          go test -tags=e2e -count=1 ./cmd/gig/
+          go test ./... -race -count=1
+          go test -tags=e2e -race -count=1 ./cmd/gig/
 
       - name: Create or Update GitHub Release
         env:
