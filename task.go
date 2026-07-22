@@ -2,9 +2,16 @@ package gig
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
+
+// ErrAlreadyClaimed is returned by Claim when the task is already held by a
+// different assignee (or is in a terminal state). Callers can branch on it with
+// errors.Is to distinguish a lost claim race from other failures.
+var ErrAlreadyClaimed = errors.New("task already claimed")
 
 // Create inserts a new task and returns it.
 func (s *Store) Create(p CreateParams) (*Task, error) {
@@ -28,20 +35,7 @@ func (s *Store) Create(p CreateParams) (*Task, error) {
 
 	now := timeNowUTC()
 
-	// Generate ID: subtasks get ladder notation (parent.1, parent.2, ...)
-	var id string
-	if p.ParentID != "" {
-		var count int
-		if err := s.db.QueryRow("SELECT COUNT(*) FROM tasks WHERE parent_id = ?", p.ParentID).Scan(&count); err != nil {
-			return nil, fmt.Errorf("count children: %w", err)
-		}
-		id = fmt.Sprintf("%s.%d", p.ParentID, count+1)
-	} else {
-		id = s.newID()
-	}
-
 	task := &Task{
-		ID:          id,
 		ParentID:    p.ParentID,
 		Title:       p.Title,
 		Description: p.Description,
@@ -61,7 +55,57 @@ func (s *Store) Create(p CreateParams) (*Task, error) {
 
 	parentID := sql.NullString{String: p.ParentID, Valid: p.ParentID != ""}
 
-	_, err := s.db.Exec(
+	// Insert + audit event live in one transaction so a crash between them can't
+	// leave a task with no creation record. For subtasks the child-count read
+	// must share that transaction too, otherwise two concurrent creations mint
+	// the same "parent.N" ladder ID.
+	//
+	// On a UNIQUE-id collision we regenerate and retry (root: fresh random ID;
+	// subtask: bump the ladder offset), bounded by maxCreateRetries.
+	const maxCreateRetries = 5
+	for attempt := 0; ; attempt++ {
+		id, event, err := s.tryCreate(p, task, parentID, now, attempt)
+		if err == nil {
+			task.ID = id
+			s.emit(event)
+			return task, nil
+		}
+		if !isUniqueTaskIDViolation(err) {
+			return nil, err
+		}
+		if attempt >= maxCreateRetries {
+			if p.ParentID != "" {
+				return nil, fmt.Errorf("subtask id space exhausted for parent %s after %d attempts", p.ParentID, attempt+1)
+			}
+			return nil, fmt.Errorf("id space exhausted after %d attempts — raise WithHashLength", attempt+1)
+		}
+	}
+}
+
+// tryCreate performs one attempt of the Create transaction: determine the ID
+// (ladder for subtasks, random for roots), INSERT the task, and record the
+// creation event — all within a single transaction. The returned Event must be
+// emitted by the caller only after this returns nil (i.e. after commit).
+// `attempt` offsets the ladder counter so ladder-collision retries advance.
+func (s *Store) tryCreate(p CreateParams, task *Task, parentID sql.NullString, now time.Time, attempt int) (string, Event, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return "", Event{}, fmt.Errorf("begin create: %w", err)
+	}
+	defer tx.Rollback() // no-op after a successful Commit
+
+	var id string
+	if p.ParentID != "" {
+		var count int
+		if err := tx.QueryRow("SELECT COUNT(*) FROM tasks WHERE parent_id = ?", p.ParentID).Scan(&count); err != nil {
+			return "", Event{}, fmt.Errorf("count children: %w", err)
+		}
+		id = fmt.Sprintf("%s.%d", p.ParentID, count+1+attempt)
+	} else {
+		id = s.newID()
+	}
+
+	_, err = tx.Exec(
 		`INSERT INTO tasks (id, parent_id, title, description, status, priority, assignee,
 		  task_type, labels, notes, estimate, due_at, created_at, updated_at, created_by, metadata)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -71,11 +115,29 @@ func (s *Store) Create(p CreateParams) (*Task, error) {
 		p.CreatedBy, p.Metadata,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("insert task: %w", err)
+		// Return the raw error so the caller can detect a UNIQUE-id collision.
+		if isUniqueTaskIDViolation(err) {
+			return "", Event{}, err
+		}
+		return "", Event{}, fmt.Errorf("insert task: %w", err)
 	}
 
-	s.recordEvent(id, EventCreated, p.CreatedBy, "", "", p.Title)
-	return task, nil
+	event, err := s.recordEventTx(tx, id, EventCreated, p.CreatedBy, "", "", p.Title)
+	if err != nil {
+		return "", Event{}, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", Event{}, fmt.Errorf("commit create: %w", err)
+	}
+	return id, event, nil
+}
+
+// isUniqueTaskIDViolation reports whether err is a SQLite UNIQUE-constraint
+// failure on tasks.id. modernc.org/sqlite exposes no typed error for this, so
+// we match on the message text (stable across the driver's error formatting).
+func isUniqueTaskIDViolation(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed: tasks.id")
 }
 
 // Get retrieves a single task by ID.
@@ -119,6 +181,13 @@ func (s *Store) validateTaskExists(taskID string) error {
 	return nil
 }
 
+// eventSpec describes an audit event to record inside the Update transaction,
+// once the field diffs have been collected and the mutation is about to happen.
+type eventSpec struct {
+	eventType             EventType
+	field, oldVal, newVal string
+}
+
 // Update modifies fields of an existing task.
 func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 	task, err := s.Get(id)
@@ -128,34 +197,35 @@ func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 
 	sets := []string{}
 	args := []any{}
+	var specs []eventSpec
 
 	if p.Title != nil && *p.Title != task.Title {
-		s.recordEvent(id, EventUpdated, actor, "title", task.Title, *p.Title)
+		specs = append(specs, eventSpec{EventUpdated, "title", task.Title, *p.Title})
 		sets = append(sets, "title = ?")
 		args = append(args, *p.Title)
 	}
 	if p.Description != nil && *p.Description != task.Description {
-		s.recordEvent(id, EventUpdated, actor, "description", task.Description, *p.Description)
+		specs = append(specs, eventSpec{EventUpdated, "description", task.Description, *p.Description})
 		sets = append(sets, "description = ?")
 		args = append(args, *p.Description)
 	}
 	if p.Priority != nil && *p.Priority != task.Priority {
-		s.recordEvent(id, EventUpdated, actor, "priority", fmt.Sprintf("%d", task.Priority), fmt.Sprintf("%d", *p.Priority))
+		specs = append(specs, eventSpec{EventUpdated, "priority", fmt.Sprintf("%d", task.Priority), fmt.Sprintf("%d", *p.Priority)})
 		sets = append(sets, "priority = ?")
 		args = append(args, int(*p.Priority))
 	}
 	if p.Assignee != nil && *p.Assignee != task.Assignee {
-		s.recordEvent(id, EventAssigned, actor, "assignee", task.Assignee, *p.Assignee)
+		specs = append(specs, eventSpec{EventAssigned, "assignee", task.Assignee, *p.Assignee})
 		sets = append(sets, "assignee = ?")
 		args = append(args, *p.Assignee)
 	}
 	if p.Labels != nil {
-		s.recordEvent(id, EventUpdated, actor, "labels", labelsToJSON(task.Labels), labelsToJSON(*p.Labels))
+		specs = append(specs, eventSpec{EventUpdated, "labels", labelsToJSON(task.Labels), labelsToJSON(*p.Labels)})
 		sets = append(sets, "labels = ?")
 		args = append(args, labelsToJSON(*p.Labels))
 	}
 	if p.Orphan && task.ParentID != "" {
-		s.recordEvent(id, EventUpdated, actor, "parent_id", task.ParentID, "")
+		specs = append(specs, eventSpec{EventUpdated, "parent_id", task.ParentID, ""})
 		sets = append(sets, "parent_id = NULL")
 	} else if p.ParentID != nil && *p.ParentID != task.ParentID {
 		if *p.ParentID == "" {
@@ -167,17 +237,17 @@ func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 		if err := s.validateTaskExists(*p.ParentID); err != nil {
 			return nil, err
 		}
-		s.recordEvent(id, EventUpdated, actor, "parent_id", task.ParentID, *p.ParentID)
+		specs = append(specs, eventSpec{EventUpdated, "parent_id", task.ParentID, *p.ParentID})
 		sets = append(sets, "parent_id = ?")
 		args = append(args, *p.ParentID)
 	}
 	if p.Notes != nil && *p.Notes != task.Notes {
-		s.recordEvent(id, EventUpdated, actor, "notes", task.Notes, *p.Notes)
+		specs = append(specs, eventSpec{EventUpdated, "notes", task.Notes, *p.Notes})
 		sets = append(sets, "notes = ?")
 		args = append(args, *p.Notes)
 	}
 	if p.Estimate != nil && *p.Estimate != task.Estimate {
-		s.recordEvent(id, EventUpdated, actor, "estimate", fmt.Sprintf("%d", task.Estimate), fmt.Sprintf("%d", *p.Estimate))
+		specs = append(specs, eventSpec{EventUpdated, "estimate", fmt.Sprintf("%d", task.Estimate), fmt.Sprintf("%d", *p.Estimate)})
 		sets = append(sets, "estimate = ?")
 		args = append(args, *p.Estimate)
 	}
@@ -198,9 +268,31 @@ func (s *Store) Update(id string, p UpdateParams, actor string) (*Task, error) {
 	args = append(args, timeNowUTC().Format(timeFormat))
 	args = append(args, id)
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin update: %w", err)
+	}
+	defer tx.Rollback()
+
 	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?", strings.Join(sets, ", "))
-	if _, err := s.db.Exec(query, args...); err != nil {
+	if _, err := tx.Exec(query, args...); err != nil {
 		return nil, fmt.Errorf("update task: %w", err)
+	}
+
+	events := make([]Event, 0, len(specs))
+	for _, sp := range specs {
+		e, err := s.recordEventTx(tx, id, sp.eventType, actor, sp.field, sp.oldVal, sp.newVal)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit update: %w", err)
+	}
+	for _, e := range events {
+		s.emit(e)
 	}
 
 	return s.Get(id)
@@ -224,15 +316,29 @@ func (s *Store) UpdateStatus(id string, status Status, actor string) error {
 	}
 
 	now := timeNowUTC()
-	_, err = s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin update status: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.Exec(
 		"UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
 		string(status), now.Format(timeFormat), id,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("update status: %w", err)
 	}
 
-	s.recordEvent(id, EventStatusChanged, actor, "status", string(task.Status), string(status))
+	event, err := s.recordEventTx(tx, id, EventStatusChanged, actor, "status", string(task.Status), string(status))
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit update status: %w", err)
+	}
+	s.emit(event)
 
 	// Auto-progress parent when child becomes active.
 	if status == StatusInProgress {
@@ -264,15 +370,29 @@ func (s *Store) CloseTask(id string, reason string, actor string) error {
 	}
 
 	now := timeNowUTC()
-	_, err = s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin close task: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.Exec(
 		"UPDATE tasks SET status = ?, closed_at = ?, close_reason = ?, updated_at = ? WHERE id = ?",
 		string(StatusClosed), now.Format(timeFormat), reason, now.Format(timeFormat), id,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("close task: %w", err)
 	}
 
-	s.recordEvent(id, EventClosed, actor, "status", string(task.Status), string(StatusClosed))
+	event, err := s.recordEventTx(tx, id, EventClosed, actor, "status", string(task.Status), string(StatusClosed))
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit close task: %w", err)
+	}
+	s.emit(event)
 
 	if err := s.autoUnblock(id, actor); err != nil {
 		return fmt.Errorf("auto-unblock after closing %s: %w", id, err)
@@ -292,15 +412,29 @@ func (s *Store) CancelTask(id string, reason string, actor string) error {
 	}
 
 	now := timeNowUTC()
-	_, err = s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin cancel task: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err = tx.Exec(
 		"UPDATE tasks SET status = ?, closed_at = ?, close_reason = ?, updated_at = ? WHERE id = ?",
 		string(StatusCancelled), now.Format(timeFormat), reason, now.Format(timeFormat), id,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("cancel task: %w", err)
 	}
 
-	s.recordEvent(id, EventStatusChanged, actor, "status", string(task.Status), string(StatusCancelled))
+	event, err := s.recordEventTx(tx, id, EventStatusChanged, actor, "status", string(task.Status), string(StatusCancelled))
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit cancel task: %w", err)
+	}
+	s.emit(event)
 
 	if err := s.autoUnblock(id, actor); err != nil {
 		return fmt.Errorf("auto-unblock after cancelling %s: %w", id, err)
@@ -453,36 +587,96 @@ type ClaimResult struct {
 	ParentID         string // parent task ID (if progressed)
 }
 
-// Claim atomically sets assignee and status to in_progress.
+// Claim atomically sets assignee and status to in_progress using a
+// compare-and-swap: the UPDATE only fires when the task is not already claimed
+// by someone else and is not terminal. Two concurrent claimers can no longer
+// both "win" — exactly one UPDATE affects a row; the loser gets ErrAlreadyClaimed.
+//
+// Semantics:
+//   - open / blocked / deferred → claimable (matches prior behaviour: only
+//     terminal states were rejected).
+//   - in_progress by the SAME assignee → allowed (idempotent resume).
+//   - in_progress by a DIFFERENT assignee → ErrAlreadyClaimed.
+//   - closed / cancelled → ErrAlreadyClaimed (terminal).
+//
 // If the task has a parent that is open, it is auto-progressed to in_progress.
 func (s *Store) Claim(id string, assignee string) (*ClaimResult, error) {
+	// Pre-read for event old-values. With SetMaxOpenConns(1) the in-process
+	// window between this read and the CAS is closed; cross-process, the CAS
+	// itself is the guarantee.
 	task, err := s.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	if task.Status.IsTerminal() {
-		return nil, fmt.Errorf("cannot claim %s task %s", task.Status, id)
-	}
 
 	now := timeNowUTC()
-	_, err = s.db.Exec(
-		"UPDATE tasks SET assignee = ?, status = ?, updated_at = ? WHERE id = ?",
-		assignee, string(StatusInProgress), now.Format(timeFormat), id,
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("begin claim: %w", err)
+	}
+	defer tx.Rollback()
+
+	// CAS: claim only when the row is not terminal and not held by a different
+	// assignee. The same-assignee carve-out allows idempotent re-claim.
+	res, err := tx.Exec(
+		`UPDATE tasks SET assignee = ?, status = ?, updated_at = ?
+		 WHERE id = ?
+		   AND status NOT IN (?, ?)
+		   AND NOT (status = ? AND assignee != ?)`,
+		assignee, string(StatusInProgress), now.Format(timeFormat),
+		id,
+		string(StatusClosed), string(StatusCancelled),
+		string(StatusInProgress), assignee,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("claim task: %w", err)
 	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("claim rows affected: %w", err)
+	}
+	if n == 0 {
+		// Distinguish a genuinely missing task from a lost claim. Read within
+		// the transaction — calling s.Get here would deadlock, since the single
+		// pooled connection (SetMaxOpenConns(1)) is held by this open tx.
+		var assignee, status string
+		gerr := tx.QueryRow("SELECT assignee, status FROM tasks WHERE id = ?", id).Scan(&assignee, &status)
+		if gerr == sql.ErrNoRows {
+			return nil, fmt.Errorf("task not found: %s", id)
+		}
+		if gerr != nil {
+			return nil, fmt.Errorf("claim lookup: %w", gerr)
+		}
+		return nil, fmt.Errorf("%w: %s held by %q (status %s)", ErrAlreadyClaimed, id, assignee, status)
+	}
 
+	var events []Event
 	if task.Assignee != assignee {
-		s.recordEvent(id, EventAssigned, assignee, "assignee", task.Assignee, assignee)
+		e, err := s.recordEventTx(tx, id, EventAssigned, assignee, "assignee", task.Assignee, assignee)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, e)
 	}
 	if task.Status != StatusInProgress {
-		s.recordEvent(id, EventStatusChanged, assignee, "status", string(task.Status), string(StatusInProgress))
+		e, err := s.recordEventTx(tx, id, EventStatusChanged, assignee, "status", string(task.Status), string(StatusInProgress))
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit claim: %w", err)
+	}
+	for _, e := range events {
+		s.emit(e)
 	}
 
 	result := &ClaimResult{}
 
-	// Auto-progress parent when child becomes active.
+	// Auto-progress parent when child becomes active (its own transaction).
 	if s.autoProgressParent(task.ParentID, assignee) {
 		result.ParentProgressed = true
 		result.ParentID = task.ParentID

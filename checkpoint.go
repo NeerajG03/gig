@@ -60,28 +60,36 @@ func (s *Store) ListCheckpoints(taskID string) ([]*Checkpoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list checkpoints: %w", err)
 	}
-	defer rows.Close()
-
 	var cps []*Checkpoint
 	for rows.Next() {
 		var cp Checkpoint
 		var createdAt string
 		if err := rows.Scan(&cp.ID, &cp.TaskID, &cp.Author, &cp.Done, &cp.Decisions, &cp.Next, &cp.Blockers, &createdAt); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan checkpoint: %w", err)
 		}
 		if t := strToTime(createdAt); t != nil {
 			cp.CreatedAt = *t
 		}
+		cps = append(cps, &cp)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, err
+	}
+	// Close the outer iterator before issuing per-checkpoint file queries: with
+	// SetMaxOpenConns(1) the open rows holds the only connection, so a nested
+	// query would deadlock. Fetch files after the cursor is fully drained.
+	rows.Close()
 
+	for _, cp := range cps {
 		files, err := s.checkpointFiles(cp.ID)
 		if err != nil {
 			return nil, err
 		}
 		cp.Files = files
-
-		cps = append(cps, &cp)
 	}
-	return cps, rows.Err()
+	return cps, nil
 }
 
 // LatestCheckpoint returns the most recent checkpoint for a task, or nil if none exist.

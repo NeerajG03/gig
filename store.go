@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,9 +16,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const defaultHashLength = 4
+// defaultHashLength is the hash-portion length of generated IDs. 6 hex chars =
+// 16.7M values (e.g. "gig-a3f8c1"), keeping the birthday-bound collision
+// probability low into the tens of thousands of tasks. Existing shorter IDs
+// stay valid — length only affects newly generated IDs.
+const defaultHashLength = 6
 
-// GenerateID produces a short, prefix-based ID like "gig-a3f8".
+// GenerateID produces a short, prefix-based ID like "gig-a3f8c1".
 // The hash is derived from a UUID + current timestamp to ensure uniqueness.
 func GenerateID(prefix string, hashLen int) string {
 	if prefix == "" {
@@ -57,7 +62,7 @@ func WithPrefix(p string) Option {
 	}
 }
 
-// WithHashLength sets the hash portion length of generated IDs (3-8, default: 4).
+// WithHashLength sets the hash portion length of generated IDs (3-8, default: 6).
 func WithHashLength(n int) Option {
 	return func(s *Store) {
 		if n >= 3 && n <= 8 {
@@ -75,6 +80,17 @@ func WithConfig(c *Config) Option {
 
 // Open creates or opens a gig database at the given path.
 // It runs pending migrations and enables WAL mode and foreign keys.
+//
+// PRAGMAs are applied via the DSN's _pragma query params so they bind to
+// *every* pooled connection (not just whichever one ran a one-off PRAGMA
+// exec). SetMaxOpenConns(1) additionally serializes Go-side access, matching
+// SQLite's single-writer reality and making multi-statement sequences
+// race-free within a process. busy_timeout(5000) covers cross-process
+// contention (multi-agent use).
+//
+// Note: the "file:" DSN treats '?' and '#' in dbPath as query/fragment
+// delimiters. A path containing those characters will be misparsed; escaping
+// them breaks '/' handling, so such paths are simply unsupported.
 func Open(dbPath string, opts ...Option) (*Store, error) {
 	// Ensure parent directory exists.
 	dir := filepath.Dir(dbPath)
@@ -82,28 +98,16 @@ func Open(dbPath string, opts ...Option) (*Store, error) {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	// modernc.org/sqlite applies _pragma query params to every new connection.
+	dsn := "file:" + dbPath + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	// Enable WAL mode for better concurrent read performance.
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable WAL: %w", err)
-	}
-
-	// Wait up to 5s when the database is locked by another process (multi-agent).
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("set busy timeout: %w", err)
-	}
-
-	// Enable foreign key enforcement.
-	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
+	// Serialize Go-side access: SQLite is single-writer, and a single conn
+	// makes COUNT+INSERT and other multi-statement sequences race-free in-process.
+	db.SetMaxOpenConns(1)
 
 	// Run migrations.
 	if err := migrate.Run(db); err != nil {
@@ -114,7 +118,7 @@ func Open(dbPath string, opts ...Option) (*Store, error) {
 	s := &Store{
 		db:        db,
 		prefix:    "gig",
-		hashLen:   4,
+		hashLen:   defaultHashLength,
 		listeners: make(map[EventType][]func(Event)),
 	}
 
@@ -146,6 +150,11 @@ func (s *Store) newID() string {
 }
 
 // emit fires all registered listeners for the given event type.
+//
+// Listeners run synchronously on the writing goroutine — keep them fast; a slow
+// callback blocks the mutation that triggered it. Emission is in-process only:
+// other processes writing to the same database file do NOT trigger these
+// listeners (use EventsAfterID as a cross-process sweep instead).
 func (s *Store) emit(e Event) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -156,6 +165,9 @@ func (s *Store) emit(e Event) {
 }
 
 // On registers a callback for the given event type.
+//
+// Callbacks run synchronously on the writing goroutine and in-process only —
+// see emit. Keep them fast; offload slow work to your own goroutine/queue.
 func (s *Store) On(eventType EventType, fn func(Event)) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -169,14 +181,25 @@ func (s *Store) Off(eventType EventType) {
 	delete(s.listeners, eventType)
 }
 
+const insertEventSQL = `INSERT INTO events (task_id, event_type, actor, field, old_value, new_value, timestamp)
+	 VALUES (?, ?, ?, ?, ?, ?, ?)`
+
 // recordEvent inserts an event into the events table and emits it to listeners.
-func (s *Store) recordEvent(taskID string, eventType EventType, actor, field, oldVal, newVal string) {
+//
+// The INSERT error is returned rather than discarded (finding #3: a silently
+// dropped SQLITE_BUSY meant an audit record vanished with no trace). Callers on
+// the non-transactional emit path may choose log-and-continue, but the failure
+// is also surfaced here via slog so it is never invisible.
+func (s *Store) recordEvent(taskID string, eventType EventType, actor, field, oldVal, newVal string) error {
 	now := timeNowUTC()
-	_, _ = s.db.Exec(
-		`INSERT INTO events (task_id, event_type, actor, field, old_value, new_value, timestamp)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+	_, err := s.db.Exec(insertEventSQL,
 		taskID, string(eventType), actor, field, oldVal, newVal, now.Format(timeFormat),
 	)
+	if err != nil {
+		slog.Warn("gig: failed to record event",
+			"task_id", taskID, "event_type", string(eventType), "err", err)
+		return fmt.Errorf("record event: %w", err)
+	}
 
 	s.emit(Event{
 		TaskID:    taskID,
@@ -187,4 +210,29 @@ func (s *Store) recordEvent(taskID string, eventType EventType, actor, field, ol
 		NewValue:  newVal,
 		Timestamp: now,
 	})
+	return nil
+}
+
+// recordEventTx inserts an event using the given transaction. Unlike recordEvent
+// it does NOT emit — the caller must emit only after the transaction commits, so
+// listeners never observe events for a mutation that later rolled back. It
+// returns an Event describing what was written so the caller can emit it.
+func (s *Store) recordEventTx(tx *sql.Tx, taskID string, eventType EventType, actor, field, oldVal, newVal string) (Event, error) {
+	now := timeNowUTC()
+	_, err := tx.Exec(insertEventSQL,
+		taskID, string(eventType), actor, field, oldVal, newVal, now.Format(timeFormat),
+	)
+	e := Event{
+		TaskID:    taskID,
+		Type:      eventType,
+		Actor:     actor,
+		Field:     field,
+		OldValue:  oldVal,
+		NewValue:  newVal,
+		Timestamp: now,
+	}
+	if err != nil {
+		return e, fmt.Errorf("record event: %w", err)
+	}
+	return e, nil
 }

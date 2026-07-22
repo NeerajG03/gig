@@ -17,8 +17,11 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Unit Tests
-        run: go test ./... -v -count=1
+        run: go test ./... -race -v -count=1
 
       - name: E2E CLI Tests
-        run: go test -tags=e2e -v -count=1 ./cmd/gig/
+        run: go test -tags=e2e -race -v -count=1 ./cmd/gig/
